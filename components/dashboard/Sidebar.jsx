@@ -66,46 +66,8 @@ export default function Sidebar() {
   const isAdmin = session?.user?.role === "admin";
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  return (
+  const sidebarContent = (
     <>
-      {/* Mobile Header Bar */}
-      <div className="sm:hidden fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-4 py-3 bg-card border-b border-border">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-400 flex items-center justify-center font-mono font-extrabold text-xs text-white">
-            S
-          </div>
-          <span className="font-bold text-sm">StockPulse</span>
-        </div>
-        <button
-          onClick={() => setMobileOpen(!mobileOpen)}
-          className="w-9 h-9 flex items-center justify-center rounded-lg hover:bg-accent"
-        >
-          {mobileOpen ? (
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-          ) : (
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
-          )}
-        </button>
-      </div>
-
-      {/* Mobile Overlay */}
-      {mobileOpen && (
-        <div className="sm:hidden fixed inset-0 z-40 bg-black/50" onClick={() => setMobileOpen(false)} />
-      )}
-
-      {/* Sidebar */}
-      <aside className={`
-        fixed sm:static inset-y-0 left-0 z-40
-        w-64 bg-card border-r border-border min-h-screen flex flex-col
-        transform transition-transform duration-200
-        ${mobileOpen ? "translate-x-0" : "-translate-x-full sm:translate-x-0"}
-      `}>
-
-      {/* Mobile spacer */}
-      <div className="sm:hidden h-14" />
-
-  return (
-    <aside className="w-64 bg-card border-r border-border min-h-screen flex flex-col">
       {/* Logo */}
       <div className="p-6 border-b border-border">
         <div className="flex items-center gap-3">
@@ -165,8 +127,59 @@ export default function Sidebar() {
           Sign Out
         </button>
       </div>
-    </aside>
+    </>
+  );
+
+  return (
+    <>
+      {/* Mobile Header Bar */}
+      <div className="sm:hidden fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-4 py-3 bg-card border-b border-border">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-400 flex items-center justify-center font-mono font-extrabold text-xs text-white">
+            S
+          </div>
+          <span className="font-bold text-sm">StockPulse</span>
+        </div>
+        <button
+          onClick={() => setMobileOpen(!mobileOpen)}
+          className="w-9 h-9 flex items-center justify-center rounded-lg hover:bg-accent"
+        >
+          {mobileOpen ? (
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          ) : (
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <line x1="3" y1="6" x2="21" y2="6" />
+              <line x1="3" y1="12" x2="21" y2="12" />
+              <line x1="3" y1="18" x2="21" y2="18" />
+            </svg>
+          )}
+        </button>
+      </div>
+
+      {/* Mobile Overlay */}
+      {mobileOpen && (
+        <div
+          className="sm:hidden fixed inset-0 z-40 bg-black/50"
+          onClick={() => setMobileOpen(false)}
+        />
+      )}
+
+      {/* Sidebar - hidden on mobile unless open */}
+      <aside
+        className={`
+          fixed sm:static inset-y-0 left-0 z-40
+          w-64 bg-card border-r border-border min-h-screen flex flex-col
+          transform transition-transform duration-200
+          ${mobileOpen ? "translate-x-0" : "-translate-x-full sm:translate-x-0"}
+        `}
+      >
+        {/* Spacer for mobile header */}
+        <div className="sm:hidden h-14" />
+        {sidebarContent}
+      </aside>
     </>
   );
 }
-
