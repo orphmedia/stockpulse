@@ -6,10 +6,8 @@ import { computeAllIndicators } from "@/lib/indicators";
 import { generateSignal } from "@/lib/signals";
 import { supabaseAdmin } from "@/lib/supabase";
 
-/**
- * Cron endpoint — runs every 5 minutes during market hours
- * Configured in vercel.json: "*/5 9-16 * * 1-5"
- */
+// Cron endpoint — runs every 5 minutes during market hours
+// Configured in vercel.json: every 5 min, 9-16 Mon-Fri
 export async function GET(request) {
   // Verify cron secret to prevent unauthorized access
   const authHeader = request.headers.get("authorization");
