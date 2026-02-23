@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 
 const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
-const ELEVENLABS_VOICE_ID = process.env.ELEVENLABS_VOICE_ID || "pNInz6obpgDQGcFmaJgB"; // Adam
+const ELEVENLABS_VOICE_ID = process.env.ELEVENLABS_VOICE_ID || "DXFkLCBUTmvXpp2QwZjA";
 
 export async function POST(request) {
   const session = await getServerSession(authOptions);
