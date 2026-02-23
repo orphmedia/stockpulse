@@ -37,21 +37,20 @@ export default function AIChat({ prices, news, signals, watchlist, socialData, o
     if (isOpen) { inputRef.current?.focus(); setUnread(0); }
   }, [isOpen]);
 
-  // ═══ SPEECH SYNTHESIS (AI talks back) ═══
-  const speak = (text) => {
-    if (typeof window === "undefined" || !window.speechSynthesis) return;
+  // ═══ SPEECH SYNTHESIS — ElevenLabs (premium) or browser fallback ═══
+  const audioRef = useRef(null);
 
-    // Check user settings
+  const speak = async (text) => {
+    if (typeof window === "undefined") return;
+
     let settings = {};
     try { settings = JSON.parse(localStorage.getItem("stockpulse_settings") || "{}"); } catch {}
     if (settings.voiceEnabled === false) return;
 
-    window.speechSynthesis.cancel();
-
-    // Clean text for speech (remove emojis, special chars)
+    // Clean text
     const cleanText = text
       .replace(/[→📊💼🔍🎙️●✓✗👁🔴♪📷🔥⚠️▲▼]/g, "")
-      .replace(/\$([A-Z]+)/g, "$1") // "$AAPL" -> "AAPL"
+      .replace(/\$([A-Z]+)/g, "$1")
       .replace(/\+/g, " plus ")
       .replace(/-(\d)/g, " minus $1")
       .replace(/\n+/g, ". ")
@@ -59,33 +58,62 @@ export default function AIChat({ prices, news, signals, watchlist, socialData, o
 
     if (!cleanText) return;
 
+    // Try ElevenLabs first
+    try {
+      const res = await fetch("/api/ai/speak", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: cleanText }),
+      });
+
+      if (res.ok && res.headers.get("content-type")?.includes("audio")) {
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+
+        // Stop any current audio
+        if (audioRef.current) {
+          audioRef.current.pause();
+          audioRef.current = null;
+        }
+
+        const audio = new Audio(url);
+        audioRef.current = audio;
+        audio.onplay = () => setIsSpeaking(true);
+        audio.onended = () => { setIsSpeaking(false); URL.revokeObjectURL(url); };
+        audio.onerror = () => { setIsSpeaking(false); URL.revokeObjectURL(url); };
+        audio.play();
+        return;
+      }
+    } catch (e) {
+      console.log("ElevenLabs unavailable, using browser voice:", e.message);
+    }
+
+    // Fallback: browser speech synthesis
+    if (!window.speechSynthesis) return;
+    window.speechSynthesis.cancel();
+
     const utterance = new SpeechSynthesisUtterance(cleanText);
     utterance.rate = 0.95;
     utterance.pitch = 0.85;
 
-    // Pick voice: user's saved preference, or smooth male fallback
     const voices = window.speechSynthesis.getVoices();
     const savedVoiceName = settings.selectedVoice;
     const preferred = (savedVoiceName && voices.find((v) => v.name === savedVoiceName))
-      || voices.find((v) =>
-        v.name.includes("Daniel") || v.name.includes("Aaron") ||
-        v.name.includes("Microsoft Guy") || v.name.includes("Microsoft Mark") ||
-        v.name.includes("Google UK English Male") ||
-        v.name.includes("James") || v.name.includes("Tom") ||
-        v.name.includes("Arthur")
-      ) || voices.find((v) =>
-        v.name.includes("Alex") || v.name.includes("Google US English")
-      ) || voices.find((v) => v.lang.startsWith("en")) || voices[0];
+      || voices.find((v) => v.name.includes("Daniel") || v.name.includes("Google UK English Male"))
+      || voices.find((v) => v.lang.startsWith("en")) || voices[0];
     if (preferred) utterance.voice = preferred;
 
     utterance.onstart = () => setIsSpeaking(true);
     utterance.onend = () => setIsSpeaking(false);
     utterance.onerror = () => setIsSpeaking(false);
-
     window.speechSynthesis.speak(utterance);
   };
 
   const stopSpeaking = () => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
     if (typeof window !== "undefined" && window.speechSynthesis) {
       window.speechSynthesis.cancel();
     }
