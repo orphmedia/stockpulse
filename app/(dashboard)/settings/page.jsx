@@ -205,27 +205,13 @@ export default function SettingsPage() {
           </div>
 
           <div className="border-t border-border pt-4">
-            <label className="text-sm font-medium mb-2 block">Alert Webhook URL</label>
-            <p className="text-xs text-muted-foreground mb-3">
-              Connect to Twilio, Make.com, Zapier, or any webhook endpoint to send SMS
-            </p>
-            <input
-              type="url"
-              value={alertWebhook}
-              onChange={(e) => setAlertWebhook(e.target.value)}
-              placeholder="https://hooks.zapier.com/..."
-              className="w-full px-4 py-2.5 bg-background border border-border rounded-xl text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary"
-            />
-          </div>
-
-          <div className="bg-background rounded-xl p-4">
-            <h4 className="text-xs font-mono font-semibold text-muted-foreground mb-2">SETUP</h4>
-            <div className="space-y-2 text-xs text-muted-foreground">
-              <p>1. Enter your phone number above</p>
-              <p>2. Twilio sends SMS directly — your admin adds Twilio credentials to Vercel env vars:</p>
-              <p className="font-mono text-[10px] bg-card p-2 rounded mt-1">TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER</p>
-              <p>3. Tell the AI: &quot;Alert me if NVDA moves big&quot; or &quot;Text me about Tesla news&quot;</p>
-              <p className="mt-2 text-[10px]">Or use a custom webhook (Zapier/Make.com) as a fallback:</p>
+            <div className="bg-background rounded-xl p-4">
+              <h4 className="text-xs font-mono font-semibold text-muted-foreground mb-2">HOW IT WORKS</h4>
+              <div className="space-y-2 text-xs text-muted-foreground">
+                <p>1. Enter your phone number above and save</p>
+                <p>2. Tell the AI: &quot;Text me if NVDA has big news&quot; or &quot;Alert me about Tesla&quot;</p>
+                <p>3. You&apos;ll receive an SMS within seconds via Twilio</p>
+              </div>
             </div>
           </div>
         </div>
