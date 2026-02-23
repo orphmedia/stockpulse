@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import AIPanel from "@/components/dashboard/AIPanel";
 
 const DEFAULT_WATCHLIST = [
   { symbol: "AAPL", name: "Apple Inc.", sector: "Technology" },
@@ -314,6 +315,18 @@ export default function DashboardPage() {
               </div>
             </div>
           </div>
+
+          {/* AI Analysis Panel */}
+          <AIPanel
+            symbol={selectedSymbol}
+            stockName={watchlist.find((w) => w.symbol === selectedSymbol)?.name}
+            articles={news.filter((a) => a.symbols?.includes(selectedSymbol) || a.category === "markets")}
+            sentiment={signals[selectedSymbol]}
+            price={prices[selectedSymbol]?.price}
+            onAddToWatchlist={(sym, name) => {
+              console.log(`Added ${sym} to watchlist`);
+            }}
+          />
 
           {/* All Signals Grid */}
           <div className="bg-card border border-border rounded-2xl p-6">
