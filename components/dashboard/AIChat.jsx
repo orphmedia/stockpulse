@@ -200,11 +200,21 @@ export default function AIChat({ prices, news, signals, watchlist, socialData, o
     setLoading(true);
 
     try {
+      // Build conversation history for context
+      const history = messages
+        .filter((m) => m.role === "user" || m.role === "assistant")
+        .slice(-20) // Last 20 messages for context window
+        .map((m) => ({
+          role: m.role,
+          content: m.role === "assistant" ? m.content : m.content,
+        }));
+
       const res = await fetch("/api/ai/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           message: userMsg,
+          history,
           prices,
           news: (news || []).slice(0, 15),
           signals, watchlist, socialData,

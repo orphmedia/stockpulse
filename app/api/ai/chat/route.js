@@ -14,16 +14,14 @@ export async function POST(request) {
     return NextResponse.json({ error: "AI not configured" }, { status: 503 });
   }
 
-  const { message, prices, news, signals, watchlist, socialData } = await request.json();
+  const { message, history, prices, news, signals, watchlist, socialData } = await request.json();
 
   try {
-    // Build market context
     const priceContext = Object.entries(prices || {})
       .map(([sym, p]) => `${sym}: $${p.price?.toFixed(2)} (bid: $${p.bid?.toFixed(2)}, ask: $${p.ask?.toFixed(2)})`)
       .join("\n");
 
-    const newsContext = (news || [])
-      .slice(0, 10)
+    const newsContext = (news || []).slice(0, 10)
       .map((a) => `- "${a.title}" (${a.source}, sentiment: ${a.sentiment?.score?.toFixed(2) || "n/a"})`)
       .join("\n");
 
@@ -32,12 +30,12 @@ export async function POST(request) {
       .join("\n");
 
     const watchlistContext = (watchlist || [])
-      .map((w) => `${w.symbol} (${w.name})`)
+      .map((w) => typeof w === "string" ? w : `${w.symbol} (${w.name})`)
       .join(", ");
 
     const socialContext = socialData?.posts
       ? socialData.posts.slice(0, 8).map((p) =>
-        `[${p.platform}] "${p.title}" (${p.symbols?.join(",")}, sentiment: ${p.sentiment?.score?.toFixed(2) || "n/a"}, engagement: ${p.engagement || 0})`
+        `[${p.platform}] "${p.title}" (${p.symbols?.join(",")}, sentiment: ${p.sentiment?.score?.toFixed(2) || "n/a"})`
       ).join("\n")
       : "No social data available";
 
@@ -47,58 +45,64 @@ export async function POST(request) {
       ).join("\n")
       : "";
 
-    const systemPrompt = `You are StockPulse AI, a conversational financial assistant built into a stock dashboard. You are direct, sharp, and conversational — not corporate. You have real-time access to market data.
+    const today = new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
 
-CURRENT MARKET DATA:
-${priceContext || "No price data available"}
+    const systemPrompt = `You are StockPulse AI — a smart, conversational financial assistant. Today is ${today}. You talk like a sharp, knowledgeable trading buddy — not a corporate bot. You remember everything the user has said in this conversation and follow up naturally.
 
-RECENT NEWS:
-${newsContext || "No recent news"}
+LIVE MARKET DATA:
+${priceContext || "No price data"}
 
-SENTIMENT SIGNALS:
+NEWS:
+${newsContext || "No news"}
+
+SENTIMENT:
 ${signalContext || "No signals"}
 
-USER'S CURRENT WATCHLIST:
-${watchlistContext || "Empty watchlist"}
+WATCHLIST: ${watchlistContext || "Empty"}
 
-SOCIAL MEDIA SENTIMENT:
+SOCIAL BUZZ:
 ${socialContext}
+${socialSummary ? `\nSOCIAL SUMMARY:\n${socialSummary}` : ""}
 
-SOCIAL SUMMARY BY STOCK:
-${socialSummary}
+ACTIONS YOU CAN EXECUTE — include in the "actions" array:
+1. Add to watchlist: {type: "add_to_watchlist", symbol: "CSCO", name: "Cisco Systems", sector: "Technology"}
+2. Remove from watchlist: {type: "remove_from_watchlist", symbol: "TSLA"}
+3. Add to portfolio: {type: "add_to_portfolio", symbol: "AAPL", shares: 50, avg_cost: 185.00, name: "Apple Inc.", sector: "Technology"}
+4. Remove from portfolio: {type: "remove_from_portfolio", symbol: "TSLA"}
+5. Monitor: {type: "monitor", symbol: "NVDA", name: "NVIDIA Corp.", sector: "Technology"}
+6. SMS alert: {type: "send_alert", symbol: "NVDA", message: "NVDA dropped 5%", urgency: "high"}
 
-CAPABILITIES — You can take these actions by including them in your response JSON:
-1. ADD stocks to watchlist: {type: "add_to_watchlist", symbol: "CSCO", name: "Cisco Systems", sector: "Technology"}
-2. REMOVE stocks from watchlist: {type: "remove_from_watchlist", symbol: "TSLA"}
-3. ADD to portfolio: {type: "add_to_portfolio", symbol: "AAPL", shares: 50, avg_cost: 185.00, name: "Apple Inc.", sector: "Technology"}
-4. REMOVE from portfolio: {type: "remove_from_portfolio", symbol: "TSLA"}
-5. MONITOR a stock: {type: "monitor", symbol: "NVDA", name: "NVIDIA Corp.", sector: "Technology"} — adds to watchlist for tracking
-6. SEND URGENT ALERT via SMS: {type: "send_alert", symbol: "NVDA", message: "NVDA dropped 5% — consider reviewing your position", urgency: "high"}
-7. Analyze any stock based on news, social media sentiment, and price data
-8. Recommend top 10 watchlists
-9. Give market commentary with social sentiment insights
+RESPOND WITH JSON ONLY — no markdown fences:
+{"response": "your message", "actions": []}
 
-RESPONSE FORMAT — Always respond with valid JSON only, no markdown fences:
-{
-  "response": "Your conversational message to the user",
-  "actions": [] 
-}
+CRITICAL:
+- When the user says add/watch/track/monitor anything — ALWAYS include the action. Saying "I'll add it" without the action does NOTHING.
+- You have FULL conversation history — reference earlier messages naturally. If the user said they like tech stocks 5 messages ago, remember that.
+- Be conversational. Ask follow-ups. React to what they said. Don't repeat yourself.
+- When recommending stocks, use your knowledge AND the live data above.
+- Keep responses punchy — 1-3 paragraphs. Don't lecture.
+- You can execute multiple actions at once.`;
 
-The "actions" array should contain action objects when the user asks to add/remove stocks. Leave it empty [] when no action is needed.
+    // Build message array with full conversation history
+    const messages = [];
 
-CRITICAL RULES:
-- When someone says "add X", "watch X", "put X on my watchlist", "track X", or anything similar — ALWAYS include the add_to_watchlist or monitor action. Do NOT just talk about it.
-- When someone says "add X to my portfolio" with shares/price — ALWAYS include add_to_portfolio action.
-- When someone says "monitor X" or "keep an eye on X" — ALWAYS include the monitor action.
-- When someone says "alert me", "text me", "notify me" about something urgent — include a send_alert action.
-- You MUST include the action in the JSON. Just saying "I'll add it" without the action object means NOTHING happens.
-- If you know the company name for a ticker, always include it. Use your knowledge for common stocks.
-- Be conversational and direct, like a sharp trading buddy
-- When asked for a top 10, give thoughtful picks with brief reasoning and include add_to_watchlist actions for ALL of them
-- When analyzing, reference actual news headlines, social media sentiment, and price data
-- Keep responses concise — 2-4 paragraphs max
-- You can execute multiple actions in one response
-- Never say you can't access real-time data — you have it above`;
+    // Add conversation history
+    if (history && history.length > 0) {
+      for (const msg of history) {
+        if (msg.role === "user") {
+          messages.push({ role: "user", content: msg.content });
+        } else if (msg.role === "assistant") {
+          // Wrap assistant responses as if they were the JSON format
+          messages.push({
+            role: "assistant",
+            content: JSON.stringify({ response: msg.content, actions: [] }),
+          });
+        }
+      }
+    }
+
+    // Add current message
+    messages.push({ role: "user", content: message });
 
     const res = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -109,14 +113,35 @@ CRITICAL RULES:
       },
       body: JSON.stringify({
         model: "claude-sonnet-4-20250514",
-        max_tokens: 1500,
+        max_tokens: 2000,
         system: systemPrompt,
-        messages: [{ role: "user", content: message }],
+        messages,
+        tools: [
+          {
+            type: "web_search_20250305",
+            name: "web_search",
+          },
+        ],
       }),
     });
 
     const data = await res.json();
-    const rawResponse = data.content?.[0]?.text || "";
+
+    // Extract text from response (may have web search blocks)
+    let rawResponse = "";
+    for (const block of data.content || []) {
+      if (block.type === "text") {
+        rawResponse += block.text;
+      }
+    }
+
+    if (!rawResponse) {
+      console.error("[AI Chat] No text response:", JSON.stringify(data).slice(0, 500));
+      return NextResponse.json({
+        response: "I had trouble processing that. Try again?",
+        actions: [],
+      });
+    }
 
     // Parse response
     let parsed;
@@ -124,7 +149,6 @@ CRITICAL RULES:
       const cleaned = rawResponse.replace(/```json\n?|```/g, "").trim();
       parsed = JSON.parse(cleaned);
     } catch {
-      // If not valid JSON, treat as plain text response
       parsed = { response: rawResponse, actions: [] };
     }
 

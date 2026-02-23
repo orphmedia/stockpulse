@@ -92,6 +92,10 @@ RULES:
 
     const data = await res.json();
 
+    if (data.error) {
+      console.error("[DailyPicks] API error:", JSON.stringify(data.error));
+    }
+
     // Extract text from response (may have multiple content blocks with web search)
     let fullText = "";
     for (const block of data.content || []) {
