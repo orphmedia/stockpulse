@@ -39,6 +39,7 @@ export default function AIChat({ prices, news, signals, watchlist, socialData, o
 
   // ═══ SPEECH SYNTHESIS — ElevenLabs (premium) or browser fallback ═══
   const audioRef = useRef(null);
+  const speakingSourceRef = useRef(null); // "elevenlabs" or "browser"
 
   const speak = async (text) => {
     if (typeof window === "undefined") return;
@@ -58,39 +59,53 @@ export default function AIChat({ prices, news, signals, watchlist, socialData, o
 
     if (!cleanText) return;
 
+    // Stop anything currently playing
+    stopSpeaking();
+
     // Try ElevenLabs first
     try {
+      console.log("[StockPulse] Requesting ElevenLabs voice...");
       const res = await fetch("/api/ai/speak", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: cleanText }),
       });
 
+      console.log("[StockPulse] ElevenLabs response:", res.status, res.headers.get("content-type"));
+
       if (res.ok && res.headers.get("content-type")?.includes("audio")) {
         const blob = await res.blob();
         const url = URL.createObjectURL(blob);
-
-        // Stop any current audio
-        if (audioRef.current) {
-          audioRef.current.pause();
-          audioRef.current = null;
-        }
-
         const audio = new Audio(url);
         audioRef.current = audio;
+        speakingSourceRef.current = "elevenlabs";
+
         audio.onplay = () => setIsSpeaking(true);
-        audio.onended = () => { setIsSpeaking(false); URL.revokeObjectURL(url); };
-        audio.onerror = () => { setIsSpeaking(false); URL.revokeObjectURL(url); };
-        audio.play();
-        return;
+        audio.onended = () => { setIsSpeaking(false); URL.revokeObjectURL(url); audioRef.current = null; };
+        audio.onerror = (e) => { 
+          console.log("[StockPulse] Audio play error:", e);
+          setIsSpeaking(false); 
+          URL.revokeObjectURL(url); 
+          audioRef.current = null;
+        };
+
+        await audio.play();
+        console.log("[StockPulse] ElevenLabs audio playing!");
+        return; // Success — don't fall through to browser voice
       }
+
+      // If we got here, ElevenLabs returned an error
+      const errData = await res.text();
+      console.log("[StockPulse] ElevenLabs error:", errData);
     } catch (e) {
-      console.log("ElevenLabs unavailable, using browser voice:", e.message);
+      console.log("[StockPulse] ElevenLabs failed:", e.message);
     }
 
     // Fallback: browser speech synthesis
+    console.log("[StockPulse] Falling back to browser voice");
     if (!window.speechSynthesis) return;
     window.speechSynthesis.cancel();
+    speakingSourceRef.current = "browser";
 
     const utterance = new SpeechSynthesisUtterance(cleanText);
     utterance.rate = 0.95;
@@ -112,11 +127,13 @@ export default function AIChat({ prices, news, signals, watchlist, socialData, o
   const stopSpeaking = () => {
     if (audioRef.current) {
       audioRef.current.pause();
+      audioRef.current.currentTime = 0;
       audioRef.current = null;
     }
     if (typeof window !== "undefined" && window.speechSynthesis) {
       window.speechSynthesis.cancel();
     }
+    speakingSourceRef.current = null;
     setIsSpeaking(false);
   };
 
