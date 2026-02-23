@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import AIChat from "@/components/dashboard/AIChat";
 import Movers from "@/components/dashboard/Movers";
 import TopWatchlist from "@/components/dashboard/TopWatchlist";
+import SocialFeed from "@/components/dashboard/SocialFeed";
 
 const DEFAULT_WATCHLIST = [
   { symbol: "AAPL", name: "Apple Inc.", sector: "Technology" },
@@ -29,6 +30,7 @@ export default function DashboardPage() {
   const [prevPrices, setPrevPrices] = useState({});
   const [news, setNews] = useState([]);
   const [signals, setSignals] = useState({});
+  const [socialData, setSocialData] = useState(null);
   const [selectedSymbol, setSelectedSymbol] = useState("AAPL");
   const [loading, setLoading] = useState(true);
   const [lastUpdate, setLastUpdate] = useState(null);
@@ -38,6 +40,9 @@ export default function DashboardPage() {
   const [priceFlash, setPriceFlash] = useState({});
   const intervalRef = useRef(null);
   const newsIntervalRef = useRef(null);
+  const socialIntervalRef = useRef(null);
+
+  const symbols = watchlist.map((w) => w.symbol);
 
   const symbols = watchlist.map((w) => w.symbol);
   const symbolsParam = symbols.join(",");
@@ -88,9 +93,22 @@ export default function DashboardPage() {
     }
   }, [symbolsParam]);
 
+  const fetchSocial = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/social?symbols=${symbolsParam}`);
+      if (res.ok) {
+        const data = await res.json();
+        setSocialData(data);
+      }
+    } catch (error) {
+      console.error("Social fetch error:", error);
+    }
+  }, [symbolsParam]);
+
   const handleRefresh = () => {
     fetchPrices();
     fetchNews();
+    fetchSocial();
   };
 
   // Price polling
@@ -108,6 +126,13 @@ export default function DashboardPage() {
     newsIntervalRef.current = setInterval(fetchNews, 120000);
     return () => clearInterval(newsIntervalRef.current);
   }, [fetchNews]);
+
+  // Social polling (every 3 min)
+  useEffect(() => {
+    fetchSocial();
+    socialIntervalRef.current = setInterval(fetchSocial, 180000);
+    return () => clearInterval(socialIntervalRef.current);
+  }, [fetchSocial]);
 
   const toggleLive = () => {
     if (isLive) {
@@ -321,6 +346,9 @@ export default function DashboardPage() {
           {/* Gainers & Losers */}
           <Movers prices={prices} prevPrices={prevPrices} watchlist={watchlist} />
 
+          {/* Social Media Sentiment */}
+          <SocialFeed symbols={symbols} selectedSymbol={selectedSymbol} />
+
           {/* All Signals Grid */}
           <div className="bg-card border border-border rounded-2xl p-6">
             <h3 className="text-sm font-semibold font-mono text-muted-foreground mb-4">ALL SIGNALS</h3>
@@ -428,6 +456,7 @@ export default function DashboardPage() {
         news={news}
         signals={signals}
         watchlist={watchlist}
+        socialData={socialData}
         onWatchlistUpdate={() => {
           // Force re-render of TopWatchlist by triggering a state change
           setFetchCount((c) => c + 0.001);

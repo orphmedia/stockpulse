@@ -14,7 +14,7 @@ export async function POST(request) {
     return NextResponse.json({ error: "AI not configured" }, { status: 503 });
   }
 
-  const { message, prices, news, signals, watchlist } = await request.json();
+  const { message, prices, news, signals, watchlist, socialData } = await request.json();
 
   try {
     // Build market context
@@ -35,6 +35,18 @@ export async function POST(request) {
       .map((w) => `${w.symbol} (${w.name})`)
       .join(", ");
 
+    const socialContext = socialData?.posts
+      ? socialData.posts.slice(0, 8).map((p) =>
+        `[${p.platform}] "${p.title}" (${p.symbols?.join(",")}, sentiment: ${p.sentiment?.score?.toFixed(2) || "n/a"}, engagement: ${p.engagement || 0})`
+      ).join("\n")
+      : "No social data available";
+
+    const socialSummary = socialData?.aggregated
+      ? Object.entries(socialData.aggregated).map(([sym, data]) =>
+        `${sym}: ${data.totalPosts} social posts, avg sentiment ${data.avgSentiment?.toFixed(2) || 0}`
+      ).join("\n")
+      : "";
+
     const systemPrompt = `You are StockPulse AI, a conversational financial assistant built into a stock dashboard. You are direct, sharp, and conversational — not corporate. You have real-time access to market data.
 
 CURRENT MARKET DATA:
@@ -48,6 +60,12 @@ ${signalContext || "No signals"}
 
 USER'S CURRENT WATCHLIST:
 ${watchlistContext || "Empty watchlist"}
+
+SOCIAL MEDIA SENTIMENT:
+${socialContext}
+
+SOCIAL SUMMARY BY STOCK:
+${socialSummary}
 
 CAPABILITIES — You can take these actions by including them in your response JSON:
 1. ADD stocks to watchlist: include action {type: "add_to_watchlist", symbol: "CSCO", name: "Cisco Systems", sector: "Technology"}
