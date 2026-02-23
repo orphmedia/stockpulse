@@ -20,6 +20,14 @@ export default function AIChat({ prices, news, signals, watchlist, socialData, o
   const inputRef = useRef(null);
   const recognitionRef = useRef(null);
 
+  // Load voice setting
+  useEffect(() => {
+    try {
+      const s = JSON.parse(localStorage.getItem("stockpulse_settings") || "{}");
+      if (s.voiceEnabled !== undefined) setVoiceEnabled(s.voiceEnabled);
+    } catch {}
+  }, []);
+
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
@@ -31,9 +39,13 @@ export default function AIChat({ prices, news, signals, watchlist, socialData, o
 
   // ═══ SPEECH SYNTHESIS (AI talks back) ═══
   const speak = (text) => {
-    if (!voiceEnabled || typeof window === "undefined" || !window.speechSynthesis) return;
+    if (typeof window === "undefined" || !window.speechSynthesis) return;
 
-    // Stop any current speech
+    // Check user settings
+    let settings = {};
+    try { settings = JSON.parse(localStorage.getItem("stockpulse_settings") || "{}"); } catch {}
+    if (settings.voiceEnabled === false) return;
+
     window.speechSynthesis.cancel();
 
     // Clean text for speech (remove emojis, special chars)
@@ -48,16 +60,22 @@ export default function AIChat({ prices, news, signals, watchlist, socialData, o
     if (!cleanText) return;
 
     const utterance = new SpeechSynthesisUtterance(cleanText);
-    utterance.rate = 1.05;
-    utterance.pitch = 1.0;
+    utterance.rate = 0.95;
+    utterance.pitch = 0.85;
 
-    // Try to pick a good voice
+    // Pick voice: user's saved preference, or smooth male fallback
     const voices = window.speechSynthesis.getVoices();
-    const preferred = voices.find((v) =>
-      v.name.includes("Samantha") || v.name.includes("Alex") ||
-      v.name.includes("Google US") || v.name.includes("Microsoft Mark") ||
-      v.name.includes("Daniel")
-    ) || voices.find((v) => v.lang.startsWith("en")) || voices[0];
+    const savedVoiceName = settings.selectedVoice;
+    const preferred = (savedVoiceName && voices.find((v) => v.name === savedVoiceName))
+      || voices.find((v) =>
+        v.name.includes("Daniel") || v.name.includes("Aaron") ||
+        v.name.includes("Microsoft Guy") || v.name.includes("Microsoft Mark") ||
+        v.name.includes("Google UK English Male") ||
+        v.name.includes("James") || v.name.includes("Tom") ||
+        v.name.includes("Arthur")
+      ) || voices.find((v) =>
+        v.name.includes("Alex") || v.name.includes("Google US English")
+      ) || voices.find((v) => v.lang.startsWith("en")) || voices[0];
     if (preferred) utterance.voice = preferred;
 
     utterance.onstart = () => setIsSpeaking(true);
@@ -178,6 +196,9 @@ export default function AIChat({ prices, news, signals, watchlist, socialData, o
             } else if (action.type === "monitor") {
               await fetch("/api/watchlist", { method: "POST", headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ symbol: action.symbol, name: action.name || action.symbol, sector: action.sector || "Unknown" }) });
+            } else if (action.type === "send_alert") {
+              await fetch("/api/alerts", { method: "POST", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ symbol: action.symbol, message: action.message, urgency: action.urgency || "normal" }) });
             }
           }
           if (onWatchlistUpdate) onWatchlistUpdate();
@@ -230,7 +251,16 @@ export default function AIChat({ prices, news, signals, watchlist, socialData, o
         <div className="flex items-center gap-1">
           {/* Voice toggle */}
           <button
-            onClick={() => { setVoiceEnabled(!voiceEnabled); if (isSpeaking) stopSpeaking(); }}
+            onClick={() => {
+              const newVal = !voiceEnabled;
+              setVoiceEnabled(newVal);
+              if (isSpeaking) stopSpeaking();
+              try {
+                const s = JSON.parse(localStorage.getItem("stockpulse_settings") || "{}");
+                s.voiceEnabled = newVal;
+                localStorage.setItem("stockpulse_settings", JSON.stringify(s));
+              } catch {}
+            }}
             className={`w-8 h-8 flex items-center justify-center rounded-lg transition-colors ${voiceEnabled ? "text-blue-400 hover:bg-blue-500/10" : "text-muted-foreground hover:bg-accent"}`}
             title={voiceEnabled ? "Voice on" : "Voice off"}
           >
@@ -283,6 +313,7 @@ export default function AIChat({ prices, news, signals, watchlist, socialData, o
                         {action.type === "add_to_portfolio" && "✓ Portfolio"}
                         {action.type === "remove_from_portfolio" && "✗ Portfolio"}
                         {action.type === "monitor" && "👁 Monitoring"}
+                        {action.type === "send_alert" && "📱 Alert Sent"}
                       </span>
                       <span className="font-mono font-semibold">{action.symbol}</span>
                       {action.shares && <span className="text-muted-foreground">{action.shares} shares</span>}
