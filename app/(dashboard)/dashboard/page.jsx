@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import AIChat from "@/components/dashboard/AIChat";
 import PortfolioWidget from "@/components/dashboard/PortfolioWidget";
+import DailyPicks from "@/components/dashboard/DailyPicks";
 
 const REFRESH_INTERVALS = { "5s": 5000, "10s": 10000, "30s": 30000, "1m": 60000 };
 
@@ -206,6 +207,16 @@ export default function DashboardPage() {
         <div className="col-span-1 lg:col-span-2 space-y-6">
           {/* Portfolio */}
           <PortfolioWidget key={portfolioKey} prices={prices} signals={signals} />
+
+          {/* Daily AI Picks */}
+          <DailyPicks
+            prices={prices}
+            news={news}
+            signals={signals}
+            portfolio={portfolioSymbols}
+            watchlist={watchlistSymbols}
+            onWatchlistUpdate={() => setPortfolioKey((k) => k + 1)}
+          />
 
           {/* News Feed — compact */}
           <div className="bg-card border border-border rounded-2xl p-5">
