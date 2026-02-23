@@ -15,65 +15,59 @@ export async function POST(request) {
 
   const { news, signals, prices, portfolio, watchlist } = await request.json();
 
-  // Build context
-  const priceContext = Object.entries(prices || {})
-    .map(([sym, d]) => `${sym}: $${d.price?.toFixed(2)}`)
-    .join(", ");
-
-  const newsContext = (news || []).slice(0, 20)
-    .map((a) => `[${a.source}] ${a.title} (sentiment: ${a.sentiment?.score?.toFixed(2) || "N/A"}, symbols: ${a.symbols?.join(",") || "none"})`)
+  const newsContext = (news || []).slice(0, 15)
+    .map((a) => `[${a.source}] ${a.title} (sentiment: ${a.sentiment?.score?.toFixed(2) || "?"}, symbols: ${a.symbols?.join(",") || "none"})`)
     .join("\n");
 
-  const signalContext = Object.entries(signals || {})
-    .map(([sym, s]) => `${sym}: sentiment ${s.avgScore?.toFixed(2)}, ${s.articleCount} articles`)
-    .join("\n");
+  const portfolioList = (portfolio || []).join(", ");
+  const watchlistList = (watchlist || []).join(", ");
 
-  const portfolioContext = (portfolio || [])
-    .map((h) => h.symbol)
-    .join(", ");
+  const today = new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
 
-  const watchlistContext = (watchlist || [])
-    .map((w) => w.symbol || w)
-    .join(", ");
+  const prompt = `You are a top stock market analyst for StockPulse. Today is ${today}.
 
-  const prompt = `You are a sharp stock market analyst for StockPulse. Based on today's news, sentiment, and price data, recommend 3-5 stocks to consider buying today.
+The user already owns: ${portfolioList || "nothing yet"}
+The user is already watching: ${watchlistList || "nothing yet"}
 
-CURRENT PRICES:
-${priceContext || "Not available"}
+Here is today's news the user can already see:
+${newsContext || "No news loaded yet"}
 
-NEWS & SENTIMENT:
-${newsContext || "No news available"}
+YOUR JOB: Find 5 NEW stock opportunities the user is NOT already tracking. Look beyond their current portfolio and watchlist. Think about:
+- Stocks making big moves today based on earnings, upgrades, new products, partnerships
+- Sectors gaining momentum (AI, energy, biotech, defense, etc.)
+- Undervalued plays with upcoming catalysts
+- Breakout candidates with strong technical setups
 
-SIGNAL SCORES:
-${signalContext || "No signals"}
+Use your knowledge of current market conditions and recent events to find fresh opportunities.
 
-USER'S PORTFOLIO: ${portfolioContext || "Empty"}
-USER'S WATCHLIST: ${watchlistContext || "Empty"}
+DO NOT recommend stocks that are in their portfolio (${portfolioList}) or watchlist (${watchlistList}). These are stocks they already know about.
 
-RESPOND WITH VALID JSON ONLY — no markdown fences:
+RESPOND WITH VALID JSON ONLY — no markdown, no backticks, just raw JSON:
 {
   "picks": [
     {
-      "symbol": "NVDA",
-      "name": "NVIDIA Corp.",
+      "symbol": "SYMBOL",
+      "name": "Full Company Name",
       "action": "BUY",
       "confidence": "HIGH",
-      "reason": "One short sentence why",
-      "catalyst": "What's driving this today"
+      "reason": "Why buy — one clear sentence",
+      "catalyst": "What specific event or trend is driving this",
+      "sector": "Technology"
     }
   ],
-  "market_outlook": "One sentence on overall market mood today",
+  "market_outlook": "One sentence on today's overall market mood and direction",
+  "theme": "The common theme or trend connecting today's picks",
   "avoid": ["SYMBOL1"],
-  "avoid_reason": "Brief reason to avoid these"
+  "avoid_reason": "Brief reason to stay away from these right now"
 }
 
 RULES:
-- Pick 3-5 stocks with the strongest buy signals based on today's actual data
-- Confidence: HIGH (strong sentiment + catalyst), MEDIUM (mixed signals), SPECULATIVE (momentum play)
-- Don't just recommend what's already in their portfolio — find opportunities
-- Be specific about what catalyst is driving each pick TODAY
-- Include 1-2 stocks to avoid if sentiment is clearly negative
-- Be direct and actionable — no fluff`;
+- Exactly 5 picks, all DIFFERENT from portfolio and watchlist
+- Mix of sectors — don't give 5 tech stocks
+- Confidence: HIGH (clear catalyst + momentum), MEDIUM (promising setup), SPECULATIVE (high risk/reward)
+- At least 1 should be a lesser-known name, not a mega-cap everyone knows
+- Include 1-2 stocks to AVOID with reason
+- Be specific and actionable — reference real events, earnings, upgrades, not vague statements`;
 
   try {
     const res = await fetch("https://api.anthropic.com/v1/messages", {
@@ -85,24 +79,45 @@ RULES:
       },
       body: JSON.stringify({
         model: "claude-sonnet-4-20250514",
-        max_tokens: 1500,
+        max_tokens: 2000,
+        tools: [
+          {
+            type: "web_search_20250305",
+            name: "web_search",
+          },
+        ],
         messages: [{ role: "user", content: prompt }],
       }),
     });
 
     const data = await res.json();
-    const text = data.content?.[0]?.text || "";
 
+    // Extract text from response (may have multiple content blocks with web search)
+    let fullText = "";
+    for (const block of data.content || []) {
+      if (block.type === "text") {
+        fullText += block.text;
+      }
+    }
+
+    if (!fullText) {
+      console.error("[DailyPicks] No text in response:", JSON.stringify(data).slice(0, 500));
+      return NextResponse.json({ error: "No response from AI" }, { status: 500 });
+    }
+
+    // Parse JSON from response
     try {
-      const picks = JSON.parse(text);
+      const picks = JSON.parse(fullText);
       return NextResponse.json(picks);
     } catch {
-      // Try to extract JSON from response
-      const match = text.match(/\{[\s\S]*\}/);
+      const match = fullText.match(/\{[\s\S]*\}/);
       if (match) {
-        return NextResponse.json(JSON.parse(match[0]));
+        try {
+          return NextResponse.json(JSON.parse(match[0]));
+        } catch {}
       }
-      return NextResponse.json({ error: "Failed to parse picks", raw: text }, { status: 500 });
+      console.error("[DailyPicks] Parse error, raw:", fullText.slice(0, 500));
+      return NextResponse.json({ error: "Failed to parse picks" }, { status: 500 });
     }
   } catch (error) {
     console.error("[DailyPicks] Error:", error);

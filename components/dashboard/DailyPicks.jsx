@@ -81,10 +81,10 @@ export default function DailyPicks({ prices, news, signals, portfolio, watchlist
             </svg>
           </div>
           <div>
-            <h3 className="text-xs font-mono font-semibold text-muted-foreground">TODAY&apos;S PICKS</h3>
+            <h3 className="text-xs font-mono font-semibold text-muted-foreground">TODAY&apos;S DISCOVERIES</h3>
             {lastGenerated && (
               <span className="text-[9px] text-muted-foreground">
-                {lastGenerated.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                New picks · {lastGenerated.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
               </span>
             )}
           </div>
@@ -110,6 +110,9 @@ export default function DailyPicks({ prices, news, signals, portfolio, watchlist
       {picks?.market_outlook && (
         <div className="px-3 py-2 bg-background rounded-lg mb-3">
           <p className="text-xs text-muted-foreground">{picks.market_outlook}</p>
+          {picks.theme && (
+            <p className="text-[10px] text-primary font-medium mt-1">Theme: {picks.theme}</p>
+          )}
         </div>
       )}
 
@@ -149,6 +152,9 @@ export default function DailyPicks({ prices, news, signals, portfolio, watchlist
                   </button>
                 </div>
                 <p className="text-[11px] text-foreground/80 mb-1">{pick.name}</p>
+                {pick.sector && (
+                  <span className="text-[9px] font-mono text-muted-foreground bg-background px-1.5 py-0.5 rounded inline-block mb-1">{pick.sector}</span>
+                )}
                 <p className="text-[11px] text-muted-foreground">{pick.reason}</p>
                 {pick.catalyst && (
                   <p className="text-[10px] text-muted-foreground/70 mt-1 italic">Catalyst: {pick.catalyst}</p>
