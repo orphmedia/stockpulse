@@ -50,6 +50,10 @@ RESPOND WITH VALID JSON ONLY — no markdown, no backticks, just raw JSON:
       "name": "Full Company Name",
       "action": "BUY",
       "confidence": "HIGH",
+      "current_price": 150.25,
+      "target_price": 185.00,
+      "upside_pct": 23.1,
+      "dividend_yield": 1.8,
       "reason": "Why buy — one clear sentence",
       "catalyst": "What specific event or trend is driving this",
       "sector": "Technology"
@@ -63,6 +67,8 @@ RESPOND WITH VALID JSON ONLY — no markdown, no backticks, just raw JSON:
 
 RULES:
 - Exactly 5 picks, all DIFFERENT from portfolio and watchlist
+- ALWAYS include current_price (recent trading price), target_price (12-month analyst target or your projection), upside_pct, and dividend_yield (0 if none)
+- Use your knowledge of real stock prices — be accurate. Search the web if unsure.
 - Mix of sectors — don't give 5 tech stocks
 - Confidence: HIGH (clear catalyst + momentum), MEDIUM (promising setup), SPECULATIVE (high risk/reward)
 - At least 1 should be a lesser-known name, not a mega-cap everyone knows

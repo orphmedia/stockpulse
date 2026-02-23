@@ -200,13 +200,14 @@ export default function AIChat({ prices, news, signals, watchlist, portfolio, so
     setLoading(true);
 
     try {
-      // Build conversation history for context
+      // Build conversation history — exclude welcome message and current message
       const history = messages
+        .slice(1) // Skip welcome message
         .filter((m) => m.role === "user" || m.role === "assistant")
-        .slice(-20) // Last 20 messages for context window
+        .slice(-20)
         .map((m) => ({
           role: m.role,
-          content: m.role === "assistant" ? m.content : m.content,
+          content: m.content,
         }));
 
       const res = await fetch("/api/ai/chat", {

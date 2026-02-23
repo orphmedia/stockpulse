@@ -151,7 +151,30 @@ export default function DailyPicks({ prices, news, signals, portfolio, watchlist
                     {isAdding ? "✓ Added" : "+ Watch"}
                   </button>
                 </div>
-                <p className="text-[11px] text-foreground/80 mb-1">{pick.name}</p>
+                <p className="text-[11px] text-foreground/80 mb-1.5">{pick.name}</p>
+
+                {/* Price, Target, Dividend row */}
+                <div className="flex items-center gap-3 mb-1.5 flex-wrap">
+                  {pick.current_price && (
+                    <span className="font-mono font-semibold text-xs">${Number(pick.current_price).toFixed(2)}</span>
+                  )}
+                  {pick.target_price && (
+                    <span className="text-[10px] font-mono text-muted-foreground">
+                      → <span className="text-emerald-500 font-semibold">${Number(pick.target_price).toFixed(2)}</span>
+                    </span>
+                  )}
+                  {pick.upside_pct > 0 && (
+                    <span className="text-[9px] font-mono font-bold text-emerald-500 bg-emerald-500/10 px-1.5 py-0.5 rounded">
+                      ▲ {Number(pick.upside_pct).toFixed(1)}%
+                    </span>
+                  )}
+                  {pick.dividend_yield > 0 && (
+                    <span className="text-[9px] font-mono text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded">
+                      DIV {Number(pick.dividend_yield).toFixed(1)}%
+                    </span>
+                  )}
+                </div>
+
                 {pick.sector && (
                   <span className="text-[9px] font-mono text-muted-foreground bg-background px-1.5 py-0.5 rounded inline-block mb-1">{pick.sector}</span>
                 )}
