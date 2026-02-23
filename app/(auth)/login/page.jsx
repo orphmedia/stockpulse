@@ -23,7 +23,13 @@ export default function LoginPage() {
     });
 
     if (result?.error) {
-      setError("Invalid email or password");
+      if (result.error.includes("pending")) {
+        setError("Your account is pending admin approval.");
+      } else if (result.error.includes("rejected")) {
+        setError("Your account has been rejected.");
+      } else {
+        setError("Invalid email or password");
+      }
       setLoading(false);
     } else {
       router.push("/dashboard");
@@ -117,6 +123,12 @@ export default function LoginPage() {
 
         <p className="text-center text-xs text-muted-foreground mt-6 font-mono">
           Private access only · Not financial advice
+        </p>
+        <p className="text-center text-sm text-muted-foreground mt-4">
+          Don't have an account?{" "}
+          <a href="/register" className="text-primary hover:underline">
+            Request access
+          </a>
         </p>
       </div>
     </div>
