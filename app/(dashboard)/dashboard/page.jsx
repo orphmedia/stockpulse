@@ -5,6 +5,7 @@ import AIChat from "@/components/dashboard/AIChat";
 import Movers from "@/components/dashboard/Movers";
 import TopWatchlist from "@/components/dashboard/TopWatchlist";
 import SocialFeed from "@/components/dashboard/SocialFeed";
+import PortfolioWidget from "@/components/dashboard/PortfolioWidget";
 
 const DEFAULT_WATCHLIST = [
   { symbol: "AAPL", name: "Apple Inc.", sector: "Technology" },
@@ -38,11 +39,12 @@ export default function DashboardPage() {
   const [isLive, setIsLive] = useState(true);
   const [fetchCount, setFetchCount] = useState(0);
   const [priceFlash, setPriceFlash] = useState({});
+  const [portfolioKey, setPortfolioKey] = useState(0);
   const intervalRef = useRef(null);
   const newsIntervalRef = useRef(null);
   const socialIntervalRef = useRef(null);
 
-  //const symbols = watchlist.map((w) => w.symbol);
+  const symbols = watchlist.map((w) => w.symbol);
 
   const symbols = watchlist.map((w) => w.symbol);
   const symbolsParam = symbols.join(",");
@@ -390,6 +392,9 @@ export default function DashboardPage() {
           </div>
         </div>
 
+        {/* Portfolio Widget */}
+        <PortfolioWidget key={portfolioKey} prices={prices} />
+
         {/* News Feed */}
         <div className="bg-card border border-border rounded-2xl p-6 max-h-[800px] flex flex-col">
           <div className="flex items-center justify-between mb-4">
@@ -458,8 +463,10 @@ export default function DashboardPage() {
         watchlist={watchlist}
         socialData={socialData}
         onWatchlistUpdate={() => {
-          // Force re-render of TopWatchlist by triggering a state change
           setFetchCount((c) => c + 0.001);
+        }}
+        onPortfolioUpdate={() => {
+          setPortfolioKey((k) => k + 1);
         }}
       />
     </div>
