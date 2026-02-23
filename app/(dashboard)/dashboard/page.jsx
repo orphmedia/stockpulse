@@ -1,7 +1,9 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import AIPanel from "@/components/dashboard/AIPanel";
+import AIChat from "@/components/dashboard/AIChat";
+import Movers from "@/components/dashboard/Movers";
+import TopWatchlist from "@/components/dashboard/TopWatchlist";
 
 const DEFAULT_WATCHLIST = [
   { symbol: "AAPL", name: "Apple Inc.", sector: "Technology" },
@@ -316,17 +318,8 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* AI Analysis Panel */}
-          <AIPanel
-            symbol={selectedSymbol}
-            stockName={watchlist.find((w) => w.symbol === selectedSymbol)?.name}
-            articles={news.filter((a) => a.symbols?.includes(selectedSymbol) || a.category === "markets")}
-            sentiment={signals[selectedSymbol]}
-            price={prices[selectedSymbol]?.price}
-            onAddToWatchlist={(sym, name) => {
-              console.log(`Added ${sym} to watchlist`);
-            }}
-          />
+          {/* Gainers & Losers */}
+          <Movers prices={prices} prevPrices={prevPrices} watchlist={watchlist} />
 
           {/* All Signals Grid */}
           <div className="bg-card border border-border rounded-2xl p-6">
@@ -418,6 +411,9 @@ export default function DashboardPage() {
             )}
           </div>
         </div>
+
+        {/* My Watchlist */}
+        <TopWatchlist onSelectSymbol={setSelectedSymbol} />
       </div>
 
       {/* Footer */}
@@ -425,6 +421,18 @@ export default function DashboardPage() {
         <span>⚠️ Not financial advice — For personal analysis only</span>
         <span>StockPulse v1.0 · Refreshing every {refreshRate} · {fetchCount} updates this session</span>
       </div>
+
+      {/* AI Chat */}
+      <AIChat
+        prices={prices}
+        news={news}
+        signals={signals}
+        watchlist={watchlist}
+        onWatchlistUpdate={() => {
+          // Force re-render of TopWatchlist by triggering a state change
+          setFetchCount((c) => c + 0.001);
+        }}
+      />
     </div>
   );
 }
