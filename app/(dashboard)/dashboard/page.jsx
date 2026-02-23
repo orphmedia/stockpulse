@@ -246,8 +246,8 @@ export default function DashboardPage() {
       </div>
 
       {/* Main Content Grid */}
-      <div className="grid grid-cols-3 gap-6">
-        <div className="col-span-2 space-y-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="col-span-1 lg:col-span-2 space-y-6">
           {/* Selected Stock Detail */}
           <div className="bg-card border border-border rounded-2xl p-6">
             <div className="flex items-center justify-between mb-6">
@@ -285,7 +285,7 @@ export default function DashboardPage() {
               })()}
             </div>
 
-            <div className="grid grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               <div className="bg-background rounded-xl p-4">
                 <div className="text-[10px] font-mono text-muted-foreground mb-1">BID</div>
                 <div className="font-mono font-semibold text-sm">${prices[selectedSymbol]?.bid?.toFixed(2) || "—"}</div>
@@ -331,7 +331,7 @@ export default function DashboardPage() {
           {/* All Signals Grid */}
           <div className="bg-card border border-border rounded-2xl p-6">
             <h3 className="text-sm font-semibold font-mono text-muted-foreground mb-4">ALL SIGNALS</h3>
-            <div className="grid grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               {watchlist.map((stock) => {
                 const price = prices[stock.symbol];
                 const flash = priceFlash[stock.symbol];

@@ -14,7 +14,6 @@
     "react-dom": "^18.2.0",
     "next-auth": "^4.24.0",
     "@supabase/supabase-js": "^2.39.0",
-    "@alpacahq/alpaca-trade-api": "^3.0.1",
     "recharts": "^2.10.0",
     "rss-parser": "^3.13.0",
     "natural": "^6.10.0",

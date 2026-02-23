@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { getMultiQuotes, getBars } from "@/lib/alpaca";
+import { getMultiQuotes, getMultiTrades, getBars } from "@/lib/alpaca";
 import { supabaseAdmin } from "@/lib/supabase";
 
 export async function GET(request) {
@@ -17,7 +17,15 @@ export async function GET(request) {
   try {
     if (type === "quote") {
       // Get real-time quotes from Alpaca
-      const quotes = await getMultiQuotes(symbols);
+      let quotes = await getMultiQuotes(symbols);
+
+      // If quotes are empty, try trades as fallback
+      if (Object.keys(quotes).length === 0) {
+        console.log("[Prices API] Quotes empty, trying trades fallback...");
+        quotes = await getMultiTrades(symbols);
+      }
+
+      console.log(`[Prices API] Returning ${Object.keys(quotes).length} quotes`);
       return NextResponse.json({ quotes });
     }
 
