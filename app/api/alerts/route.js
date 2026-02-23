@@ -3,7 +3,53 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/supabase";
 
-// POST — send an alert (SMS via webhook, or store for later)
+const TWILIO_SID = process.env.TWILIO_ACCOUNT_SID;
+const TWILIO_AUTH = process.env.TWILIO_AUTH_TOKEN;
+const TWILIO_FROM = process.env.TWILIO_PHONE_NUMBER;
+
+async function sendTwilioSMS(to, body) {
+  if (!TWILIO_SID || !TWILIO_AUTH || !TWILIO_FROM) {
+    console.log("[Alerts] Twilio not configured — skipping SMS");
+    return { sent: false, reason: "Twilio not configured" };
+  }
+
+  // Clean phone number
+  let phone = to.replace(/[\s()-]/g, "");
+  if (!phone.startsWith("+")) phone = "+1" + phone.replace(/^\+?1?/, "");
+
+  try {
+    const res = await fetch(
+      `https://api.twilio.com/2010-04-01/Accounts/${TWILIO_SID}/Messages.json`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          Authorization: "Basic " + Buffer.from(`${TWILIO_SID}:${TWILIO_AUTH}`).toString("base64"),
+        },
+        body: new URLSearchParams({
+          To: phone,
+          From: TWILIO_FROM,
+          Body: body,
+        }),
+      }
+    );
+
+    const data = await res.json();
+
+    if (data.sid) {
+      console.log(`[Alerts] SMS sent to ${phone} — SID: ${data.sid}`);
+      return { sent: true, sid: data.sid };
+    } else {
+      console.error("[Alerts] Twilio error:", data.message || data);
+      return { sent: false, reason: data.message || "Twilio error" };
+    }
+  } catch (error) {
+    console.error("[Alerts] SMS send error:", error.message);
+    return { sent: false, reason: error.message };
+  }
+}
+
+// POST — send an alert
 export async function POST(request) {
   const session = await getServerSession(authOptions);
   if (!session) {
@@ -13,56 +59,72 @@ export async function POST(request) {
   const { symbol, message, urgency } = await request.json();
 
   try {
-    // Get user's phone number from settings
+    // Get user's phone
     const { data: user } = await supabaseAdmin
       .from("users")
       .select("phone, alert_webhook")
       .eq("id", session.user.id)
       .single();
 
-    // Store alert in database
-    await supabaseAdmin.from("alerts").insert({
-      user_id: session.user.id,
-      symbol: symbol || "GENERAL",
-      message,
-      urgency: urgency || "normal",
-      sent_via: "pending",
-    });
+    const smsBody = `StockPulse ${urgency === "high" ? "🚨 URGENT" : "📊 Alert"}${symbol ? ` $${symbol}` : ""}: ${message}`;
 
-    // Send SMS via webhook (Twilio, Make.com, Zapier, etc.)
-    const webhookUrl = user?.alert_webhook || process.env.ALERT_WEBHOOK_URL;
-    if (webhookUrl) {
+    // Store alert
+    const { data: alert } = await supabaseAdmin
+      .from("alerts")
+      .insert({
+        user_id: session.user.id,
+        symbol: symbol || "GENERAL",
+        message,
+        urgency: urgency || "normal",
+        sent_via: "pending",
+      })
+      .select()
+      .single();
+
+    let result = { sent: false };
+
+    // Method 1: Direct Twilio SMS
+    if (user?.phone && TWILIO_SID) {
+      result = await sendTwilioSMS(user.phone, smsBody);
+      if (result.sent && alert) {
+        await supabaseAdmin.from("alerts").update({ sent_via: "twilio" }).eq("id", alert.id);
+      }
+    }
+    // Method 2: Custom webhook fallback
+    else if (user?.alert_webhook || process.env.ALERT_WEBHOOK_URL) {
+      const webhookUrl = user.alert_webhook || process.env.ALERT_WEBHOOK_URL;
       try {
         await fetch(webhookUrl, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             to: user?.phone || "",
-            message: `🚨 StockPulse Alert [${urgency?.toUpperCase() || "NORMAL"}]: ${symbol ? `$${symbol} — ` : ""}${message}`,
+            message: smsBody,
             symbol,
             urgency,
             user_email: session.user.email,
             timestamp: new Date().toISOString(),
           }),
         });
-
-        // Update alert status
-        await supabaseAdmin
-          .from("alerts")
-          .update({ sent_via: "webhook" })
-          .eq("user_id", session.user.id)
-          .order("created_at", { ascending: false })
-          .limit(1);
-      } catch (webhookError) {
-        console.error("Webhook send error:", webhookError.message);
+        result = { sent: true };
+        if (alert) {
+          await supabaseAdmin.from("alerts").update({ sent_via: "webhook" }).eq("id", alert.id);
+        }
+      } catch (e) {
+        console.error("[Alerts] Webhook error:", e.message);
       }
     }
 
-    return NextResponse.json({ 
-      sent: !!webhookUrl,
-      message: webhookUrl 
-        ? "Alert sent via SMS/webhook" 
-        : "Alert saved — configure phone number in Settings to receive SMS alerts"
+    if (!result.sent && !user?.phone) {
+      return NextResponse.json({
+        sent: false,
+        message: "Alert saved. Add your phone number in Settings to receive SMS alerts.",
+      });
+    }
+
+    return NextResponse.json({
+      sent: result.sent,
+      message: result.sent ? "SMS alert sent!" : "Alert saved but SMS delivery failed. Check Settings.",
     });
   } catch (error) {
     console.error("Alert error:", error);
@@ -70,7 +132,7 @@ export async function POST(request) {
   }
 }
 
-// GET — list user's recent alerts
+// GET — list recent alerts
 export async function GET() {
   const session = await getServerSession(authOptions);
   if (!session) {

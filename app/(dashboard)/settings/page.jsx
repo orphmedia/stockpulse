@@ -219,12 +219,13 @@ export default function SettingsPage() {
           </div>
 
           <div className="bg-background rounded-xl p-4">
-            <h4 className="text-xs font-mono font-semibold text-muted-foreground mb-2">HOW IT WORKS</h4>
+            <h4 className="text-xs font-mono font-semibold text-muted-foreground mb-2">SETUP</h4>
             <div className="space-y-2 text-xs text-muted-foreground">
-              <p>1. Tell the AI: &quot;Alert me if NVDA drops below $180&quot;</p>
-              <p>2. The AI creates a send_alert action with your message</p>
-              <p>3. StockPulse sends a POST to your webhook URL with the alert details</p>
-              <p>4. Your webhook (Zapier/Make/Twilio) forwards it as an SMS to your phone</p>
+              <p>1. Enter your phone number above</p>
+              <p>2. Twilio sends SMS directly — your admin adds Twilio credentials to Vercel env vars:</p>
+              <p className="font-mono text-[10px] bg-card p-2 rounded mt-1">TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER</p>
+              <p>3. Tell the AI: &quot;Alert me if NVDA moves big&quot; or &quot;Text me about Tesla news&quot;</p>
+              <p className="mt-2 text-[10px]">Or use a custom webhook (Zapier/Make.com) as a fallback:</p>
             </div>
           </div>
         </div>
