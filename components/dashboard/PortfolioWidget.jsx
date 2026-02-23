@@ -2,36 +2,95 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 
+function parseCSVLine(line) {
+  // Handle quoted CSV fields properly (commas inside quotes)
+  const result = [];
+  let current = "";
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') {
+      inQuotes = !inQuotes;
+    } else if (ch === "," && !inQuotes) {
+      result.push(current.trim());
+      current = "";
+    } else {
+      current += ch;
+    }
+  }
+  result.push(current.trim());
+  return result;
+}
+
+function cleanNumber(val) {
+  if (!val || val === "--" || val === "N/A") return 0;
+  return parseFloat(val.replace(/[$,%]/g, "").replace(/,/g, "")) || 0;
+}
+
 function parseCSV(text) {
-  const lines = text.trim().split("\n");
-  if (lines.length < 2) return [];
+  const lines = text.trim().split("\n").filter((l) => l.trim());
+  if (lines.length < 3) return [];
 
-  // Parse header
-  const header = lines[0].split(",").map((h) => h.trim().toLowerCase().replace(/['"]/g, ""));
+  // Find the header row (contains "Symbol")
+  let headerIdx = -1;
+  for (let i = 0; i < Math.min(lines.length, 5); i++) {
+    if (lines[i].toLowerCase().includes('"symbol"') || lines[i].toLowerCase().includes("symbol")) {
+      headerIdx = i;
+      break;
+    }
+  }
+  if (headerIdx === -1) return [];
 
-  // Map common column names
+  const header = parseCSVLine(lines[headerIdx]).map((h) => h.toLowerCase().replace(/['"]/g, "").trim());
+
+  // Map columns flexibly
   const colMap = {};
   header.forEach((h, i) => {
-    if (h.includes("symbol") || h.includes("ticker") || h === "stock") colMap.symbol = i;
-    else if (h.includes("share") || h.includes("quantity") || h.includes("qty")) colMap.shares = i;
-    else if (h.includes("cost") || h.includes("avg") || h.includes("price") || h.includes("basis")) colMap.avg_cost = i;
-    else if (h.includes("name") || h.includes("company")) colMap.name = i;
-    else if (h.includes("sector") || h.includes("industry")) colMap.sector = i;
+    if (h.includes("symbol") || h.includes("ticker")) colMap.symbol = i;
+    else if (h.includes("qty") || h.includes("quantity") || h.includes("shares")) colMap.shares = i;
+    else if (h.includes("cost/share") || h.includes("avg cost") || h.includes("average cost")) colMap.avg_cost = i;
+    else if (h.includes("cost basis") && colMap.cost_basis === undefined) colMap.cost_basis = i;
+    else if ((h.includes("price") && !h.includes("chng") && !h.includes("change")) && colMap.price === undefined) colMap.price = i;
+    else if (h.includes("description") || h.includes("name") || h.includes("company")) colMap.name = i;
+    else if (h.includes("security type") || h.includes("sector") || h.includes("type")) colMap.sector = i;
+    else if (h.includes("mkt val") || h.includes("market value")) colMap.market_value = i;
+    else if (h.includes("gain %") || h.includes("gain/loss %")) colMap.gain_pct = i;
   });
 
   if (colMap.symbol === undefined) return [];
 
-  // Parse rows
-  return lines.slice(1).map((line) => {
-    const cols = line.split(",").map((c) => c.trim().replace(/['"$]/g, ""));
+  // Parse data rows
+  const rows = lines.slice(headerIdx + 1);
+  return rows.map((line) => {
+    const cols = parseCSVLine(line);
+    const symbol = (cols[colMap.symbol] || "").replace(/['"]/g, "").trim();
+
+    // Skip non-stock rows (Cash, Account Total, etc.)
+    if (!symbol || symbol === "--" || symbol.includes("Cash") || symbol.includes("Total") || symbol.includes("Account")) {
+      return null;
+    }
+
+    const shares = cleanNumber(cols[colMap.shares]);
+    // Prefer cost/share, fall back to cost_basis / shares, fall back to price
+    let avgCost = colMap.avg_cost !== undefined ? cleanNumber(cols[colMap.avg_cost]) : 0;
+    if (!avgCost && colMap.cost_basis !== undefined && shares > 0) {
+      avgCost = cleanNumber(cols[colMap.cost_basis]) / shares;
+    }
+    if (!avgCost && colMap.price !== undefined) {
+      avgCost = cleanNumber(cols[colMap.price]);
+    }
+
+    const name = colMap.name !== undefined ? (cols[colMap.name] || "").replace(/['"]/g, "").trim() : "";
+    const sector = colMap.sector !== undefined ? (cols[colMap.sector] || "").replace(/['"]/g, "").trim() : "";
+
     return {
-      symbol: cols[colMap.symbol] || "",
-      shares: cols[colMap.shares] || "0",
-      avg_cost: cols[colMap.avg_cost] || "0",
-      name: cols[colMap.name] || "",
-      sector: cols[colMap.sector] || "",
+      symbol,
+      shares: shares.toString(),
+      avg_cost: avgCost.toString(),
+      name: name || symbol,
+      sector: sector || "Unknown",
     };
-  }).filter((r) => r.symbol);
+  }).filter(Boolean);
 }
 
 export default function PortfolioWidget({ prices }) {

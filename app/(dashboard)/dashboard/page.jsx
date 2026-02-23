@@ -44,8 +44,6 @@ export default function DashboardPage() {
   const newsIntervalRef = useRef(null);
   const socialIntervalRef = useRef(null);
 
- // const symbols = watchlist.map((w) => w.symbol);
-
   const symbols = watchlist.map((w) => w.symbol);
   const symbolsParam = symbols.join(",");
 
