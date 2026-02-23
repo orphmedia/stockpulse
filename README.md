@@ -1,4 +1,4 @@
-# StockPulse — Real-Time AI Stock Recommendation Engine
+# StockPulse — Real-Time AI Stock Recommendation Engine AI
 
 Private, authenticated stock analysis dashboard built with Next.js, deployed on Vercel.
 
