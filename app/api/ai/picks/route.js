@@ -9,6 +9,38 @@ export async function POST(request) {
   }
 
   const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+
+// Clean any code/markdown artifacts from text fields
+function sanitizePicks(data) {
+  if (!data?.picks) return data;
+  data.picks = data.picks.map((pick) => ({
+    ...pick,
+    reason: cleanText(pick.reason),
+    catalyst: cleanText(pick.catalyst),
+    name: cleanText(pick.name),
+    sector: cleanText(pick.sector),
+    current_price: Number(pick.current_price) || 0,
+    target_price: Number(pick.target_price) || 0,
+    upside_pct: Number(pick.upside_pct) || 0,
+    dividend_yield: Number(pick.dividend_yield) || 0,
+  }));
+  if (data.market_outlook) data.market_outlook = cleanText(data.market_outlook);
+  if (data.theme) data.theme = cleanText(data.theme);
+  if (data.avoid_reason) data.avoid_reason = cleanText(data.avoid_reason);
+  return data;
+}
+
+function cleanText(str) {
+  if (!str || typeof str !== "string") return str || "";
+  return str
+    .replace(/```[\s\S]*?```/g, "")
+    .replace(/`[^`]*`/g, "")
+    .replace(/\[?\d+\]?†?source/gi, "")
+    .replace(/【[^】]*】/g, "")
+    .replace(/\[\d+\]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
   if (!ANTHROPIC_API_KEY) {
     return NextResponse.json({ error: "AI not configured" }, { status: 503 });
   }
@@ -115,15 +147,20 @@ RULES:
       return NextResponse.json({ error: "No response from AI" }, { status: 500 });
     }
 
-    // Parse JSON from response
+    // Parse JSON from response — strip any non-JSON text
     try {
-      const picks = JSON.parse(fullText);
-      return NextResponse.json(picks);
+      const cleaned = fullText.replace(/```json\n?|```/g, "").trim();
+      const picks = JSON.parse(cleaned);
+      return NextResponse.json(sanitizePicks(picks));
     } catch {
-      const match = fullText.match(/\{[\s\S]*\}/);
-      if (match) {
+      // Find the outermost JSON object
+      const start = fullText.indexOf("{");
+      const end = fullText.lastIndexOf("}");
+      if (start !== -1 && end !== -1 && end > start) {
         try {
-          return NextResponse.json(JSON.parse(match[0]));
+          const jsonStr = fullText.slice(start, end + 1);
+          const picks = JSON.parse(jsonStr);
+          return NextResponse.json(sanitizePicks(picks));
         } catch {}
       }
       console.error("[DailyPicks] Parse error, raw:", fullText.slice(0, 500));

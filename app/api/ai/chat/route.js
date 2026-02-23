@@ -204,11 +204,30 @@ ALWAYS respond with valid JSON only — no markdown fences, no backticks:
       const cleaned = rawResponse.replace(/```json\n?|```/g, "").trim();
       parsed = JSON.parse(cleaned);
     } catch {
-      parsed = { response: rawResponse, actions: [] };
+      // Try extracting JSON from mixed text
+      const start = rawResponse.indexOf("{");
+      const end = rawResponse.lastIndexOf("}");
+      if (start !== -1 && end !== -1 && end > start) {
+        try {
+          parsed = JSON.parse(rawResponse.slice(start, end + 1));
+        } catch {
+          parsed = { response: rawResponse, actions: [] };
+        }
+      } else {
+        parsed = { response: rawResponse, actions: [] };
+      }
     }
 
+    // Clean web search citation artifacts from response text
+    let responseText = parsed.response || rawResponse;
+    responseText = responseText
+      .replace(/\[?\d+\]?†?source/gi, "")
+      .replace(/【[^】]*】/g, "")
+      .replace(/\[\d+\]/g, "")
+      .trim();
+
     return NextResponse.json({
-      response: parsed.response || rawResponse,
+      response: responseText,
       actions: parsed.actions || [],
     });
   } catch (error) {
