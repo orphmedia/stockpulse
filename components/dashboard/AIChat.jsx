@@ -203,7 +203,7 @@ export default function AIChat({ prices, news, signals, watchlist, portfolio, so
       // Build conversation history — exclude welcome message and current message
       const history = messages
         .slice(1) // Skip welcome message
-        .filter((m) => m.role === "user" || m.role === "assistant")
+        .filter((m) => (m.role === "user" || m.role === "assistant") && !m.isError)
         .slice(-20)
         .map((m) => ({
           role: m.role,
@@ -260,10 +260,10 @@ export default function AIChat({ prices, news, signals, watchlist, portfolio, so
           if (onWatchlistUpdate) onWatchlistUpdate();
         }
       } else {
-        setMessages((prev) => [...prev, { role: "assistant", content: data.error || "Something went wrong." }]);
+        setMessages((prev) => [...prev, { role: "assistant", content: data.error || "Something went wrong.", isError: true }]);
       }
     } catch {
-      setMessages((prev) => [...prev, { role: "assistant", content: "Failed to connect. Check your API key." }]);
+      setMessages((prev) => [...prev, { role: "assistant", content: "Failed to connect. Try again in a moment.", isError: true }]);
     }
     setLoading(false);
   };

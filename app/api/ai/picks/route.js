@@ -35,9 +35,14 @@ function cleanText(str) {
   return str
     .replace(/```[\s\S]*?```/g, "")
     .replace(/`[^`]*`/g, "")
+    .replace(/<\/?antml:cite[^>]*>/gi, "")
+    .replace(/<\/?cite[^>]*>/gi, "")
+    .replace(/<\/?(source|ref|footnote|sup|sub|a|span|div|p|br|b|i|em|strong)[^>]*>/gi, "")
+    .replace(/<[^>]+>/g, "")
     .replace(/\[?\d+\]?†?source/gi, "")
     .replace(/【[^】]*】/g, "")
     .replace(/\[\d+\]/g, "")
+    .replace(/&[a-z]+;/gi, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -146,6 +151,13 @@ RULES:
       console.error("[DailyPicks] No text in response:", JSON.stringify(data).slice(0, 500));
       return NextResponse.json({ error: "No response from AI" }, { status: 500 });
     }
+
+    // Strip ALL markup from raw text before parsing JSON
+    fullText = fullText
+      .replace(/<\/?antml:cite[^>]*>/gi, "")
+      .replace(/<\/?cite[^>]*>/gi, "")
+      .replace(/<[^>]+>/g, "")
+      .replace(/\[\d+\]/g, "");
 
     // Parse JSON from response — strip any non-JSON text
     try {
