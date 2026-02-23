@@ -21,7 +21,9 @@ export default function DashboardPage() {
   const [signals, setSignals] = useState({});
   const [socialData, setSocialData] = useState(null);
   const [portfolioSymbols, setPortfolioSymbols] = useState([]);
+  const [portfolioHoldings, setPortfolioHoldings] = useState([]);
   const [watchlistSymbols, setWatchlistSymbols] = useState([]);
+  const [watchlistData, setWatchlistData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [lastUpdate, setLastUpdate] = useState(null);
   const [refreshRate, setRefreshRate] = useState("10s");
@@ -49,11 +51,15 @@ export default function DashboardPage() {
         ]);
         if (portRes.ok) {
           const data = await portRes.json();
-          setPortfolioSymbols((data.portfolio || []).map((h) => h.symbol));
+          const holdings = data.portfolio || [];
+          setPortfolioSymbols(holdings.map((h) => h.symbol));
+          setPortfolioHoldings(holdings);
         }
         if (watchRes.ok) {
           const data = await watchRes.json();
-          setWatchlistSymbols((data.watchlist || []).map((w) => w.symbol));
+          const wl = data.watchlist || [];
+          setWatchlistSymbols(wl.map((w) => w.symbol));
+          setWatchlistData(wl);
         }
       } catch (e) { console.error("Symbol load error:", e); }
     };
@@ -310,7 +316,8 @@ export default function DashboardPage() {
         prices={prices}
         news={news}
         signals={signals}
-        watchlist={watchlistSymbols.map((s) => ({ symbol: s }))}
+        watchlist={watchlistData}
+        portfolio={portfolioHoldings}
         socialData={socialData}
         onWatchlistUpdate={() => setPortfolioKey((k) => k + 1)}
         onPortfolioUpdate={() => setPortfolioKey((k) => k + 1)}

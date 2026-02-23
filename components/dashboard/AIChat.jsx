@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 
-export default function AIChat({ prices, news, signals, watchlist, socialData, onWatchlistUpdate, onPortfolioUpdate }) {
+export default function AIChat({ prices, news, signals, watchlist, portfolio, socialData, onWatchlistUpdate, onPortfolioUpdate }) {
   const [messages, setMessages] = useState([
     {
       role: "assistant",
@@ -217,7 +217,7 @@ export default function AIChat({ prices, news, signals, watchlist, socialData, o
           history,
           prices,
           news: (news || []).slice(0, 15),
-          signals, watchlist, socialData,
+          signals, watchlist, portfolio, socialData,
         }),
       });
       const data = await res.json();
