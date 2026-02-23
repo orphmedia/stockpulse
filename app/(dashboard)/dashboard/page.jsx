@@ -391,7 +391,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Portfolio Widget */}
-        <PortfolioWidget key={portfolioKey} prices={prices} />
+        <PortfolioWidget key={portfolioKey} prices={prices} signals={signals} />
 
         {/* News Feed */}
         <div className="bg-card border border-border rounded-2xl p-6 max-h-[800px] flex flex-col">

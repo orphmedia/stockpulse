@@ -93,7 +93,7 @@ function parseCSV(text) {
   }).filter(Boolean);
 }
 
-export default function PortfolioWidget({ prices }) {
+export default function PortfolioWidget({ prices, signals }) {
   const [portfolio, setPortfolio] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isExpanded, setIsExpanded] = useState(false);
@@ -170,7 +170,18 @@ export default function PortfolioWidget({ prices }) {
     const costBasis = h.avg_cost * h.shares;
     const pnl = marketValue - costBasis;
     const pnlPct = costBasis > 0 ? ((pnl / costBasis) * 100) : 0;
-    return { ...h, currentPrice, marketValue, costBasis, pnl, pnlPct };
+
+    // Generate signal from sentiment if available
+    const sent = signals?.[h.symbol];
+    let signal = "HOLD";
+    let signalColor = "text-yellow-500";
+    let signalBg = "bg-yellow-500/10";
+    if (sent?.avgScore > 0.3) { signal = "BUY"; signalColor = "text-emerald-500"; signalBg = "bg-emerald-500/10"; }
+    else if (sent?.avgScore > 0.1) { signal = "LEAN BUY"; signalColor = "text-emerald-400"; signalBg = "bg-emerald-400/10"; }
+    else if (sent?.avgScore < -0.3) { signal = "SELL"; signalColor = "text-red-500"; signalBg = "bg-red-500/10"; }
+    else if (sent?.avgScore < -0.1) { signal = "LEAN SELL"; signalColor = "text-red-400"; signalBg = "bg-red-400/10"; }
+
+    return { ...h, currentPrice, marketValue, costBasis, pnl, pnlPct, signal, signalColor, signalBg };
   });
 
   const totalValue = holdings.reduce((sum, h) => sum + h.marketValue, 0);
@@ -178,9 +189,16 @@ export default function PortfolioWidget({ prices }) {
   const totalPnl = totalValue - totalCost;
   const totalPnlPct = totalCost > 0 ? ((totalPnl / totalCost) * 100) : 0;
 
+  const gainers = holdings.filter((h) => h.pnl > 0).length;
+  const losers = holdings.filter((h) => h.pnl < 0).length;
+  const bestPerformer = [...holdings].sort((a, b) => b.pnlPct - a.pnlPct)[0];
+  const worstPerformer = [...holdings].sort((a, b) => a.pnlPct - b.pnlPct)[0];
+
+  const fmt = (n) => n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
   return (
     <div className="bg-card border border-border rounded-2xl overflow-hidden">
-      {/* Compact Header — always visible */}
+      {/* Header — always visible */}
       <button
         onClick={() => setIsExpanded(!isExpanded)}
         className="w-full flex items-center justify-between px-4 py-3 hover:bg-accent/30 transition-colors"
@@ -194,18 +212,16 @@ export default function PortfolioWidget({ prices }) {
           <div className="text-left">
             <div className="text-xs font-mono font-semibold text-muted-foreground">PORTFOLIO</div>
             <div className="text-sm font-bold font-mono">
-              {totalValue > 0 ? `$${totalValue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "—"}
+              {totalValue > 0 ? `$${fmt(totalValue)}` : "—"}
             </div>
           </div>
         </div>
         <div className="flex items-center gap-3">
           {totalValue > 0 && (
             <span className={`text-xs font-mono font-semibold px-2 py-1 rounded ${
-              totalPnl >= 0
-                ? "bg-emerald-500/10 text-emerald-500"
-                : "bg-red-500/10 text-red-500"
+              totalPnl >= 0 ? "bg-emerald-500/10 text-emerald-500" : "bg-red-500/10 text-red-500"
             }`}>
-              {totalPnl >= 0 ? "+" : ""}{totalPnlPct.toFixed(2)}%
+              {totalPnl >= 0 ? "▲" : "▼"} {totalPnl >= 0 ? "+" : ""}{totalPnlPct.toFixed(2)}%
             </span>
           )}
           <svg
@@ -217,7 +233,7 @@ export default function PortfolioWidget({ prices }) {
         </div>
       </button>
 
-      {/* Expanded Content */}
+      {/* Expanded */}
       {isExpanded && (
         <div className="border-t border-border">
           {/* Actions */}
@@ -233,10 +249,7 @@ export default function PortfolioWidget({ prices }) {
               </svg>
               Upload CSV
             </button>
-            <button
-              onClick={fetchPortfolio}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-accent border border-border rounded-lg text-[10px] font-semibold hover:bg-accent/80 transition-all"
-            >
+            <button onClick={fetchPortfolio} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent border border-border rounded-lg text-[10px] font-semibold hover:bg-accent/80 transition-all">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <polyline points="23 4 23 10 17 10" />
                 <path d="M3.51 9a9 9 0 0114.85-3.36L23 10" />
@@ -245,11 +258,11 @@ export default function PortfolioWidget({ prices }) {
             </button>
           </div>
 
-          {/* CSV Upload Area */}
+          {/* CSV Upload */}
           {showUpload && (
             <div className="px-4 py-3 border-b border-border bg-accent/20">
               <p className="text-[10px] text-muted-foreground mb-2">
-                CSV should have columns: Symbol, Shares, Cost/Price (or Average Cost)
+                Supports Schwab, Fidelity, TD Ameritrade, and standard CSV formats.
               </p>
               <input
                 ref={fileInputRef}
@@ -262,63 +275,126 @@ export default function PortfolioWidget({ prices }) {
             </div>
           )}
 
-          {/* Holdings */}
           {loading ? (
             <div className="flex items-center justify-center py-6">
               <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
             </div>
           ) : holdings.length > 0 ? (
             <>
-              {/* Summary Row */}
-              <div className="grid grid-cols-4 gap-2 px-4 py-3 bg-background/50">
-                <div>
-                  <div className="text-[9px] font-mono text-muted-foreground">TOTAL VALUE</div>
-                  <div className="text-xs font-mono font-bold">
-                    ${totalValue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              {/* Overall Analysis */}
+              <div className="px-4 py-3 border-b border-border">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="bg-background rounded-xl p-3">
+                    <div className="text-[9px] font-mono text-muted-foreground mb-1">TOTAL VALUE</div>
+                    <div className="text-sm font-mono font-bold">${fmt(totalValue)}</div>
+                  </div>
+                  <div className="bg-background rounded-xl p-3">
+                    <div className="text-[9px] font-mono text-muted-foreground mb-1">TOTAL P/L</div>
+                    <div className={`text-sm font-mono font-bold ${totalPnl >= 0 ? "text-emerald-500" : "text-red-500"}`}>
+                      {totalPnl >= 0 ? "+" : ""}${fmt(totalPnl)}
+                    </div>
+                  </div>
+                  <div className="bg-background rounded-xl p-3">
+                    <div className="text-[9px] font-mono text-muted-foreground mb-1">RETURN</div>
+                    <div className={`text-sm font-mono font-bold ${totalPnlPct >= 0 ? "text-emerald-500" : "text-red-500"}`}>
+                      {totalPnlPct >= 0 ? "+" : ""}{totalPnlPct.toFixed(2)}%
+                    </div>
+                  </div>
+                  <div className="bg-background rounded-xl p-3">
+                    <div className="text-[9px] font-mono text-muted-foreground mb-1">WIN / LOSE</div>
+                    <div className="text-sm font-mono font-bold">
+                      <span className="text-emerald-500">{gainers}</span>
+                      <span className="text-muted-foreground mx-1">/</span>
+                      <span className="text-red-500">{losers}</span>
+                    </div>
                   </div>
                 </div>
-                <div>
-                  <div className="text-[9px] font-mono text-muted-foreground">COST BASIS</div>
-                  <div className="text-xs font-mono font-bold">
-                    ${totalCost.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+
+                {/* Best / Worst */}
+                {bestPerformer && (
+                  <div className="flex items-center gap-4 mt-3">
+                    <div className="flex-1 flex items-center gap-2 p-2 bg-emerald-500/5 border border-emerald-500/10 rounded-lg">
+                      <span className="text-[9px] text-emerald-500 font-mono">BEST</span>
+                      <span className="font-mono font-bold text-xs">{bestPerformer.symbol}</span>
+                      <span className="text-emerald-500 font-mono text-[10px] ml-auto">+{bestPerformer.pnlPct.toFixed(1)}%</span>
+                    </div>
+                    {worstPerformer && worstPerformer.pnl < 0 && (
+                      <div className="flex-1 flex items-center gap-2 p-2 bg-red-500/5 border border-red-500/10 rounded-lg">
+                        <span className="text-[9px] text-red-500 font-mono">WORST</span>
+                        <span className="font-mono font-bold text-xs">{worstPerformer.symbol}</span>
+                        <span className="text-red-500 font-mono text-[10px] ml-auto">{worstPerformer.pnlPct.toFixed(1)}%</span>
+                      </div>
+                    )}
                   </div>
-                </div>
-                <div>
-                  <div className="text-[9px] font-mono text-muted-foreground">P/L</div>
-                  <div className={`text-xs font-mono font-bold ${totalPnl >= 0 ? "text-emerald-500" : "text-red-500"}`}>
-                    {totalPnl >= 0 ? "+" : ""}${totalPnl.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-[9px] font-mono text-muted-foreground">RETURN</div>
-                  <div className={`text-xs font-mono font-bold ${totalPnlPct >= 0 ? "text-emerald-500" : "text-red-500"}`}>
-                    {totalPnlPct >= 0 ? "+" : ""}{totalPnlPct.toFixed(2)}%
-                  </div>
-                </div>
+                )}
               </div>
 
               {/* Holdings List */}
-              <div className="max-h-[300px] overflow-y-auto divide-y divide-border">
+              <div className="max-h-[400px] overflow-y-auto">
+                {/* Column Headers */}
+                <div className="flex items-center px-4 py-2 text-[9px] font-mono text-muted-foreground uppercase border-b border-border sticky top-0 bg-card">
+                  <span className="w-2 mr-2" />
+                  <span className="flex-1">Stock</span>
+                  <span className="w-20 text-right">Price</span>
+                  <span className="w-20 text-right">P/L</span>
+                  <span className="w-16 text-right">Signal</span>
+                  <span className="w-6" />
+                </div>
+
                 {holdings.map((h) => (
-                  <div key={h.symbol} className="flex items-center justify-between px-4 py-2.5 hover:bg-accent/20 transition-colors group">
+                  <div
+                    key={h.symbol}
+                    className="flex items-center px-4 py-2.5 border-b border-border last:border-0 hover:bg-accent/20 transition-colors group"
+                  >
+                    {/* Color indicator */}
+                    <span className={`w-2 h-full min-h-[32px] rounded-full mr-2 flex-shrink-0 ${
+                      h.pnl > 0 ? "bg-emerald-500" : h.pnl < 0 ? "bg-red-500" : "bg-yellow-500"
+                    }`} />
+
+                    {/* Stock info */}
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1.5">
                         <span className="font-mono font-bold text-xs">{h.symbol}</span>
-                        <span className="text-[9px] text-muted-foreground">{h.shares} shares</span>
+                        <span className="text-[9px] text-muted-foreground">{h.shares} sh</span>
                       </div>
                       <div className="text-[10px] text-muted-foreground truncate">{h.name}</div>
                     </div>
-                    <div className="text-right flex-shrink-0 mr-2">
+
+                    {/* Price */}
+                    <div className="w-20 text-right flex-shrink-0">
                       <div className="font-mono text-xs font-semibold">
-                        ${h.marketValue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        ${h.currentPrice > 0 ? h.currentPrice.toFixed(2) : "—"}
                       </div>
-                      <div className={`text-[10px] font-mono ${h.pnl >= 0 ? "text-emerald-500" : "text-red-500"}`}>
-                        {h.pnl >= 0 ? "+" : ""}{h.pnlPct.toFixed(2)}%
+                      <div className="text-[9px] text-muted-foreground font-mono">
+                        cost ${h.avg_cost > 0 ? Number(h.avg_cost).toFixed(2) : "—"}
                       </div>
                     </div>
+
+                    {/* P/L */}
+                    <div className="w-20 text-right flex-shrink-0">
+                      <div className={`font-mono text-xs font-semibold ${
+                        h.pnl > 0 ? "text-emerald-500" : h.pnl < 0 ? "text-red-500" : "text-muted-foreground"
+                      }`}>
+                        {h.pnl >= 0 ? "+" : ""}{h.pnlPct.toFixed(2)}%
+                      </div>
+                      <div className={`text-[9px] font-mono ${
+                        h.pnl > 0 ? "text-emerald-500/70" : h.pnl < 0 ? "text-red-500/70" : "text-muted-foreground"
+                      }`}>
+                        {h.pnl >= 0 ? "+" : ""}${fmt(h.pnl)}
+                      </div>
+                    </div>
+
+                    {/* Signal */}
+                    <div className="w-16 text-right flex-shrink-0">
+                      <span className={`text-[9px] font-mono font-bold px-1.5 py-0.5 rounded ${h.signalBg} ${h.signalColor}`}>
+                        {h.signal}
+                      </span>
+                    </div>
+
+                    {/* Remove */}
                     <button
                       onClick={() => handleRemove(h.symbol)}
-                      className="opacity-0 group-hover:opacity-100 w-6 h-6 flex items-center justify-center rounded text-muted-foreground hover:text-red-500 hover:bg-red-500/10 transition-all flex-shrink-0"
+                      className="w-6 opacity-0 group-hover:opacity-100 flex items-center justify-center rounded text-muted-foreground hover:text-red-500 transition-all flex-shrink-0"
                     >
                       <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                         <line x1="18" y1="6" x2="6" y2="18" />
