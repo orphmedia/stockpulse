@@ -5,6 +5,8 @@ import { supabaseAdmin } from "@/lib/supabase";
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 
+export const maxDuration = 60;
+
 async function callClaude(prompt, systemPrompt) {
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -61,10 +63,17 @@ export async function POST(request) {
       });
 
       const data = await res.json();
+      
+      if (!res.ok) {
+        console.error("[Analyze] API error:", res.status, JSON.stringify(data).slice(0, 300));
+        return NextResponse.json({ analysis: { recommendation: "ERROR", summary: `API error: ${data.error?.message || res.status}` }, symbol });
+      }
+
       let rawText = "";
       for (const block of data.content || []) {
         if (block.type === "text") rawText += block.text;
       }
+      console.log("[Analyze] Raw response:", rawText.slice(0, 200));
 
       let analysis;
       try {

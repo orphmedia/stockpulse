@@ -39,41 +39,46 @@ export async function GET(request) {
       const timeframe = searchParams.get("timeframe") || "1Day";
       const limit = parseInt(searchParams.get("limit") || "60");
 
-      // Try database first
-      const { data: cached } = await supabaseAdmin
-        .from("price_history")
-        .select("*")
-        .eq("symbol", symbol)
-        .order("timestamp", { ascending: true })
-        .limit(limit);
+      // Try Yahoo Finance chart first (free, reliable)
+      try {
+        const range = timeframe === "5Min" ? "1d" : timeframe === "30Min" ? "5d" : limit <= 25 ? "1mo" : limit <= 65 ? "3mo" : "1y";
+        const interval = timeframe === "5Min" ? "5m" : timeframe === "30Min" ? "30m" : "1d";
+        const yRes = await fetch(
+          `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?range=${range}&interval=${interval}`,
+          { headers: { "User-Agent": "Mozilla/5.0" }, cache: "no-store" }
+        );
+        if (yRes.ok) {
+          const yData = await yRes.json();
+          const result = yData.chart?.result?.[0];
+          if (result?.timestamp) {
+            const ts = result.timestamp;
+            const q = result.indicators?.quote?.[0];
+            const bars = ts.map((t, i) => ({
+              timestamp: new Date(t * 1000).toISOString(),
+              open: q?.open?.[i] || 0,
+              high: q?.high?.[i] || 0,
+              low: q?.low?.[i] || 0,
+              close: q?.close?.[i] || 0,
+              volume: q?.volume?.[i] || 0,
+              price: q?.close?.[i] || 0,
+            })).filter((b) => b.close > 0);
+            if (bars.length > 0) {
+              console.log(`[Prices] Yahoo chart: ${bars.length} bars for ${symbol}`);
+              return NextResponse.json({ bars, source: "yahoo" });
+            }
+          }
+        }
+      } catch (e) { console.log("[Prices] Yahoo chart failed:", e.message); }
 
-      if (cached && cached.length >= limit * 0.8) {
-        return NextResponse.json({ bars: cached, source: "cache" });
-      }
+      // Fallback to Alpaca
+      try {
+        const bars = await getBars(symbol, timeframe, limit);
+        if (bars.length > 0) {
+          return NextResponse.json({ bars, source: "alpaca" });
+        }
+      } catch (e) { console.log("[Prices] Alpaca bars failed:", e.message); }
 
-      // Fetch from Alpaca
-      const bars = await getBars(symbol, timeframe, limit);
-
-      // Store in database
-      if (bars.length > 0) {
-        const records = bars.map((bar) => ({
-          symbol: bar.symbol,
-          price: bar.close,
-          open_price: bar.open,
-          high: bar.high,
-          low: bar.low,
-          volume: bar.volume,
-          timestamp: bar.timestamp,
-          source: "alpaca",
-        }));
-
-        await supabaseAdmin
-          .from("price_history")
-          .upsert(records, { onConflict: "symbol,timestamp" })
-          .select();
-      }
-
-      return NextResponse.json({ bars, source: "alpaca" });
+      return NextResponse.json({ bars: [], source: "none" });
     }
 
     return NextResponse.json({ error: "Invalid type" }, { status: 400 });

@@ -119,20 +119,31 @@ export default function StockDetailPage({ params }) {
       const r = await fetch("/api/ai/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ symbol: sym }),
+        body: JSON.stringify({ symbol: sym, price: quote?.price }),
       });
       if (r.ok) {
         const d = await r.json();
         setAiAnalysis(d.analysis || d);
+      } else {
+        const err = await r.text();
+        console.error("[Analysis] Error:", r.status, err);
+        setAiAnalysis({ recommendation: "ERROR", summary: `Analysis failed (${r.status}). Try again.` });
       }
-    } catch {}
+    } catch (e) {
+      console.error("[Analysis]", e);
+      setAiAnalysis({ recommendation: "ERROR", summary: "Connection error. Try again." });
+    }
     setAnalyzing(false);
   };
 
   useEffect(() => {
     if (!sym) return;
     setLoading(true);
-    Promise.all([fetchQuote(), fetchBars(), fetchNews(), checkLists()]).then(() => setLoading(false));
+    Promise.all([fetchQuote(), fetchBars(), fetchNews(), checkLists()]).then(() => {
+      setLoading(false);
+      // Auto-run AI analysis
+      runAnalysis();
+    });
   }, [sym]);
 
   useEffect(() => { fetchBars(); }, [timeframe]);
