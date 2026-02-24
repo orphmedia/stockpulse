@@ -39,49 +39,45 @@ export async function POST(request) {
   const { action, symbol, articles, sentiment, price } = await request.json();
 
   try {
-    if (action === "analyze") {
-      // Build context from recent news
-      const newsContext = (articles || [])
-        .slice(0, 10)
-        .map((a, i) => `${i + 1}. "${a.title}" (${a.source}, sentiment: ${a.sentiment?.score?.toFixed(2) || "n/a"})`)
-        .join("\n");
+    // Simple symbol-only analysis — uses web search for real data
+    if (!action || action === "analyze") {
+      const systemPrompt = `You are a sharp, concise financial analyst. Analyze this stock and return ONLY valid JSON, no markdown:
+{"recommendation":"BUY/SELL/HOLD","targetPrice":0,"summary":"2-3 sentences","catalyst":"key driver","risks":"main risk","confidence":"HIGH/MEDIUM/LOW"}`;
 
-      const systemPrompt = `You are a sharp, concise financial analyst AI built into a stock dashboard called StockPulse. You analyze news sentiment, price action, and market context to give actionable insights. Be direct and specific — no generic disclaimers. Format your response as JSON with these fields:
-- "summary": 2-3 sentence overview of current sentiment and outlook
-- "signal": one of "STRONG BUY", "BUY", "HOLD", "SELL", "STRONG SELL"
-- "confidence": number 0-100
-- "keyFactors": array of 3-5 short bullet points driving the signal
-- "risks": array of 2-3 risk factors to watch
-- "priceOutlook": short 1-sentence price direction prediction
-Respond ONLY with valid JSON, no markdown fences or preamble.`;
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": ANTHROPIC_API_KEY,
+          "anthropic-version": "2023-06-01",
+        },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-20250514",
+          max_tokens: 800,
+          system: systemPrompt,
+          tools: [{ type: "web_search_20250305", name: "web_search" }],
+          messages: [{ role: "user", content: `Analyze ${symbol} stock. Current price: $${price || "unknown"}. Search for latest news, analyst ratings, and price targets. Give me your analysis.` }],
+        }),
+      });
 
-      const prompt = `Analyze ${symbol} based on the following data:
+      const data = await res.json();
+      let rawText = "";
+      for (const block of data.content || []) {
+        if (block.type === "text") rawText += block.text;
+      }
 
-Current Price: $${price || "unknown"}
-Overall Sentiment Score: ${sentiment?.avgScore?.toFixed(2) || "unknown"} (from ${sentiment?.articleCount || 0} articles)
-Sentiment Trend: ${sentiment?.trend || "unknown"}
-
-Recent Headlines:
-${newsContext || "No recent headlines available."}
-
-Give me your analysis as a financial analyst.`;
-
-      const response = await callClaude(prompt, systemPrompt);
-
-      // Try to parse JSON response
       let analysis;
       try {
-        const cleaned = response.replace(/```json\n?|```/g, "").trim();
-        analysis = JSON.parse(cleaned);
-      } catch {
-        analysis = {
-          summary: response,
-          signal: "HOLD",
-          confidence: 50,
-          keyFactors: ["Unable to parse structured analysis"],
-          risks: ["Analysis may be incomplete"],
-          priceOutlook: "Insufficient data for prediction",
-        };
+        const cleaned = rawText.replace(/```json\n?|```/g, "").replace(/<[^>]*>/g, "").trim();
+        const jsonStart = cleaned.indexOf("{");
+        const jsonEnd = cleaned.lastIndexOf("}");
+        if (jsonStart !== -1 && jsonEnd !== -1) {
+          analysis = JSON.parse(cleaned.slice(jsonStart, jsonEnd + 1));
+        }
+      } catch {}
+
+      if (!analysis) {
+        analysis = { recommendation: "HOLD", summary: rawText.slice(0, 500), confidence: "MEDIUM" };
       }
 
       return NextResponse.json({ analysis, symbol });

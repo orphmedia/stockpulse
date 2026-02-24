@@ -14,7 +14,7 @@ export default function StockCard({ symbol, name, price, change, changePct, sect
         <div className="flex items-start justify-between mb-4">
           <div>
             <div className="flex items-center gap-3">
-              <span className="font-mono font-bold text-2xl">{symbol}</span>
+              <a href={`/stock/${symbol}`} className="font-mono font-bold text-2xl hover:text-blue-400 transition-colors">{symbol}</a>
               {confidence && (
                 <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded ${
                   confidence === "HIGH" ? "bg-emerald-500/15 text-emerald-500"

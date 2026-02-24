@@ -133,13 +133,13 @@ export default function DashboardPage() {
                     const p = prices[sym]; const prev = prevPrices[sym];
                     const ch = p?.price && prev?.price ? ((p.price - prev.price) / prev.price * 100) : 0;
                     return (
-                      <div key={sym} className="flex items-center justify-between p-2.5 bg-background rounded-lg">
+                      <a key={sym} href={`/stock/${sym}`} className="flex items-center justify-between p-2.5 bg-background rounded-lg hover:bg-accent/50 transition-all cursor-pointer">
                         <span className="font-mono font-bold text-xs">{sym}</span>
                         <div className="flex items-center gap-2">
                           <span className="font-mono text-xs">${p?.price?.toFixed(2) || "—"}</span>
                           {ch !== 0 && <span className={`text-[10px] font-mono font-semibold ${ch > 0 ? "text-emerald-500" : "text-red-500"}`}>{ch > 0 ? "▲" : "▼"}{Math.abs(ch).toFixed(1)}%</span>}
                         </div>
-                      </div>
+                      </a>
                     );
                   })}
                 </div>
