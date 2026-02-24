@@ -116,21 +116,17 @@ export default function DashboardPage() {
         })}
       </div>
 
-      {/* 3-Column Layout: Discoveries | AI Chat | Watchlist+News */}
+      {/* Main Layout: Chat (2 cols) | Sidebar (1 col) */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* LEFT: Discoveries + Portfolio */}
-        <div className="space-y-6">
-          <DailyPicks prices={prices} news={news} signals={signals} portfolio={portfolioSymbols} watchlist={watchlistSymbols} onWatchlistUpdate={() => setPortfolioKey((k) => k + 1)} />
-          <PortfolioWidget key={portfolioKey} prices={prices} signals={signals} />
-        </div>
-
-        {/* CENTER: AI Chat — always on, always visible */}
-        <div>
+        {/* LEFT 2/3: AI Chat — front and center */}
+        <div className="col-span-1 lg:col-span-2">
           <AIChat prices={prices} news={news} signals={signals} watchlist={watchlistData} portfolio={portfolioHoldings} socialData={socialData} userName={session?.user?.name || ""} onWatchlistUpdate={() => setPortfolioKey((k) => k + 1)} onPortfolioUpdate={() => setPortfolioKey((k) => k + 1)} />
         </div>
 
-        {/* RIGHT: Watchlist + News */}
+        {/* RIGHT 1/3: Discoveries + Watchlist + Portfolio */}
         <div className="space-y-6">
+          <DailyPicks prices={prices} news={news} signals={signals} portfolio={portfolioSymbols} watchlist={watchlistSymbols} onWatchlistUpdate={() => setPortfolioKey((k) => k + 1)} />
+
           <div className="bg-card border border-border rounded-2xl p-5">
             <h3 className="text-xs font-mono font-semibold text-muted-foreground mb-3">WATCHLIST</h3>
             {watchlistSymbols.length > 0 ? (
@@ -172,6 +168,8 @@ export default function DashboardPage() {
               )) : <p className="text-xs text-muted-foreground text-center py-6">Loading...</p>}
             </div>
           </div>
+
+          <PortfolioWidget key={portfolioKey} prices={prices} signals={signals} />
         </div>
       </div>
 

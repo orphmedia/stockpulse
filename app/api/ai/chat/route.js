@@ -148,11 +148,15 @@ CRITICAL RULES:
     }
     apiMessages.push({ role: "user", content: message });
 
-    // ═══ API CALL — handle web search tool loop ═══
+    // ═══ API CALL — smart web search ═══
+    // Only include web search for questions that need current/external data
+    const needsSearch = /\b(news|today|current|latest|price|buy|sell|recommend|discover|what.*(happening|going on)|market|earnings|analyst|upgrade|downgrade)\b/i.test(message);
+    const tools = needsSearch ? [{ type: "web_search_20250305", name: "web_search" }] : [];
+
     let finalText = "";
     let currentMessages = [...apiMessages];
     let attempts = 0;
-    const maxAttempts = 3;
+    const maxAttempts = needsSearch ? 3 : 1;
 
     while (attempts < maxAttempts) {
       attempts++;
@@ -169,7 +173,7 @@ CRITICAL RULES:
           max_tokens: 2000,
           system: systemPrompt,
           messages: currentMessages,
-          tools: [{ type: "web_search_20250305", name: "web_search" }],
+          ...(tools.length > 0 ? { tools } : {}),
         }),
       });
 

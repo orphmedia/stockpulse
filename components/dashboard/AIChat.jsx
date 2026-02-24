@@ -83,6 +83,7 @@ export default function AIChat({ prices, news, signals, watchlist, portfolio, so
         const url = URL.createObjectURL(blob);
         const audio = new Audio(url);
         audioRef.current = audio;
+        audio.playbackRate = 1.5; // 1.5x speed
         audio.onplay = () => setIsSpeaking(true);
         audio.onended = () => { setIsSpeaking(false); URL.revokeObjectURL(url); audioRef.current = null; };
         audio.onerror = () => { setIsSpeaking(false); URL.revokeObjectURL(url); audioRef.current = null; };
@@ -95,8 +96,8 @@ export default function AIChat({ prices, news, signals, watchlist, portfolio, so
     if (!window.speechSynthesis) return;
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(cleanText);
-    utterance.rate = 0.95;
-    utterance.pitch = 0.85;
+    utterance.rate = 1.5;
+    utterance.pitch = 0.9;
     const voices = window.speechSynthesis.getVoices();
     const preferred = voices.find((v) => v.name.includes("Daniel") || v.name.includes("Google UK English Male"))
       || voices.find((v) => v.lang.startsWith("en")) || voices[0];
@@ -177,8 +178,40 @@ export default function AIChat({ prices, news, signals, watchlist, portfolio, so
       const data = await res.json();
 
       if (data.response) {
-        setMessages((prev) => [...prev, { role: "assistant", content: data.response, actions: data.actions }]);
-        speak(data.response);
+        // Typewriter effect — stream words in
+        const fullText = data.response;
+        const words = fullText.split(" ");
+        const msgIndex = messages.length + 1; // +1 for the user message we just added
+        
+        // Add empty assistant message first
+        setMessages((prev) => [...prev, { role: "assistant", content: "", actions: data.actions, _typing: true }]);
+        
+        let currentText = "";
+        for (let i = 0; i < words.length; i++) {
+          currentText += (i === 0 ? "" : " ") + words[i];
+          const textSoFar = currentText;
+          await new Promise((r) => setTimeout(r, 30)); // 30ms per word
+          setMessages((prev) => {
+            const updated = [...prev];
+            const lastMsg = updated[updated.length - 1];
+            if (lastMsg?.role === "assistant" && lastMsg._typing) {
+              updated[updated.length - 1] = { ...lastMsg, content: textSoFar };
+            }
+            return updated;
+          });
+        }
+        
+        // Mark typing complete
+        setMessages((prev) => {
+          const updated = [...prev];
+          const lastMsg = updated[updated.length - 1];
+          if (lastMsg?._typing) {
+            updated[updated.length - 1] = { ...lastMsg, _typing: false };
+          }
+          return updated;
+        });
+        
+        speak(fullText);
 
         if (data.actions?.length > 0) {
           for (const action of data.actions) {
@@ -215,7 +248,7 @@ export default function AIChat({ prices, news, signals, watchlist, portfolio, so
   const handleSubmit = (e) => { e.preventDefault(); submitMessage(); };
 
   return (
-    <div className="bg-card border border-border rounded-2xl overflow-hidden flex flex-col" style={{ minHeight: "520px", maxHeight: "75vh" }}>
+    <div className="bg-card border border-border rounded-2xl overflow-hidden flex flex-col" style={{ minHeight: "600px", maxHeight: "80vh" }}>
       {/* Header */}
       <div className="flex items-center justify-between px-5 py-3 border-b border-border bg-gradient-to-r from-blue-600/10 to-cyan-500/10 flex-shrink-0">
         <div className="flex items-center gap-3">
