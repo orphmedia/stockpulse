@@ -174,7 +174,21 @@ export default function AIChat({ prices, news, signals, watchlist, portfolio, so
         await fetch("/api/portfolio", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ symbol: a.symbol }) });
         if (onPortfolioUpdate) onPortfolioUpdate();
       } else if (a.type === "send_alert") {
-        await fetch("/api/alerts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ symbol: a.symbol, message: a.message || `Alert for ${a.symbol}`, urgency: a.urgency || "normal" }) });
+        try {
+          const alertRes = await fetch("/api/alerts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ symbol: a.symbol, message: a.message || `Alert for ${a.symbol}`, urgency: a.urgency || "normal" }) });
+          const alertData = await alertRes.json();
+          if (!alertData.sent) {
+            // Append a note to the last message about alert setup
+            setMessages((prev) => {
+              const u = [...prev];
+              const last = u[u.length - 1];
+              if (last?.role === "assistant") {
+                u[u.length - 1] = { ...last, content: last.content + "\n\n⚠️ " + (alertData.message || "Go to Settings to configure text alerts — add your phone & carrier.") };
+              }
+              return u;
+            });
+          }
+        } catch {}
       }
     }
     if (actions.some((a) => a.type.includes("watchlist") || a.type === "monitor") && onWatchlistUpdate) onWatchlistUpdate();

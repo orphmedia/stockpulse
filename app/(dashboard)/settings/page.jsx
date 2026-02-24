@@ -13,6 +13,7 @@ export default function SettingsPage() {
   const [selectedVoice, setSelectedVoice] = useState("");
   const [voices, setVoices] = useState([]);
   const [phone, setPhone] = useState("");
+  const [carrier, setCarrier] = useState("");
   const [alertWebhook, setAlertWebhook] = useState("");
   const [saved, setSaved] = useState(false);
   const [testPlaying, setTestPlaying] = useState(false);
@@ -40,6 +41,7 @@ export default function SettingsPage() {
       if (saved.voiceEnabled !== undefined) setVoiceEnabled(saved.voiceEnabled);
       if (saved.selectedVoice) setSelectedVoice(saved.selectedVoice);
       if (saved.phone) setPhone(saved.phone);
+      if (saved.carrier) setCarrier(saved.carrier);
       if (saved.alertWebhook) setAlertWebhook(saved.alertWebhook);
       if (saved.notifications !== undefined) setNotifications(saved.notifications);
       if (saved.signalAlerts !== undefined) setSignalAlerts(saved.signalAlerts);
@@ -75,18 +77,18 @@ export default function SettingsPage() {
   const handleSave = async () => {
     if (typeof window !== "undefined") {
       localStorage.setItem("stockpulse_settings", JSON.stringify({
-        refreshRate, voiceEnabled, selectedVoice, phone, alertWebhook,
+        refreshRate, voiceEnabled, selectedVoice, phone, carrier, alertWebhook,
         notifications, signalAlerts, newsAlerts,
       }));
     }
 
-    // Save phone to Supabase user record
+    // Save phone + carrier to Supabase user record
     if (phone) {
       try {
         await fetch("/api/settings", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ phone, alert_webhook: alertWebhook }),
+          body: JSON.stringify({ phone, carrier, alert_webhook: alertWebhook }),
         });
       } catch (e) { console.error("Save settings error:", e); }
     }
@@ -204,14 +206,42 @@ export default function SettingsPage() {
             />
           </div>
 
+          <div>
+            <label className="text-sm font-medium mb-2 block">Mobile Carrier</label>
+            <p className="text-xs text-muted-foreground mb-3">
+              Required for free text alerts (no Twilio needed)
+            </p>
+            <select
+              value={carrier}
+              onChange={(e) => setCarrier(e.target.value)}
+              className="w-full px-4 py-2.5 bg-background border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+            >
+              <option value="">Select your carrier...</option>
+              <option value="att">AT&T</option>
+              <option value="tmobile">T-Mobile</option>
+              <option value="verizon">Verizon</option>
+              <option value="sprint">Sprint</option>
+              <option value="cricket">Cricket</option>
+              <option value="metro">Metro by T-Mobile</option>
+              <option value="boost">Boost Mobile</option>
+              <option value="mint">Mint Mobile</option>
+              <option value="visible">Visible</option>
+              <option value="uscellular">US Cellular</option>
+            </select>
+          </div>
+
           <div className="border-t border-border pt-4">
             <div className="bg-background rounded-xl p-4">
-              <h4 className="text-xs font-mono font-semibold text-muted-foreground mb-2">HOW IT WORKS</h4>
+              <h4 className="text-xs font-mono font-semibold text-muted-foreground mb-2">HOW TEXT ALERTS WORK</h4>
               <div className="space-y-2 text-xs text-muted-foreground">
-                <p>1. Enter your phone number above and save</p>
-                <p>2. Tell the AI: &quot;Text me if NVDA has big news&quot; or &quot;Alert me about Tesla&quot;</p>
-                <p>3. You&apos;ll receive an SMS within seconds via Twilio</p>
+                <p>1. Enter your phone number and select carrier above</p>
+                <p>2. Save your settings</p>
+                <p>3. Tell the AI: &quot;Alert me when NVDA drops below $100&quot;</p>
+                <p>4. Texts are sent via your carrier&apos;s email-to-SMS gateway</p>
               </div>
+              {!carrier && phone && (
+                <p className="text-xs text-amber-500 mt-2 font-semibold">⚠ Select your carrier to enable text alerts</p>
+              )}
             </div>
           </div>
         </div>

@@ -9,11 +9,11 @@ export async function POST(request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { phone, alert_webhook } = await request.json();
+  const { phone, carrier, alert_webhook } = await request.json();
 
   const { error } = await supabaseAdmin
     .from("users")
-    .update({ phone, alert_webhook })
+    .update({ phone, carrier, alert_webhook })
     .eq("id", session.user.id);
 
   if (error) {

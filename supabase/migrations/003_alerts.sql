@@ -2,8 +2,9 @@
 -- Alerts + User Settings — Run this in Supabase SQL Editor
 -- ═══════════════════════════════════════════════════════════════
 
--- Add phone and webhook to users table
+-- Add phone, carrier, and webhook to users table
 ALTER TABLE users ADD COLUMN IF NOT EXISTS phone TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS carrier TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS alert_webhook TEXT;
 
 -- Alerts table

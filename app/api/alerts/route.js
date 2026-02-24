@@ -7,13 +7,25 @@ const TWILIO_SID = process.env.TWILIO_ACCOUNT_SID;
 const TWILIO_AUTH = process.env.TWILIO_AUTH_TOKEN;
 const TWILIO_FROM = process.env.TWILIO_PHONE_NUMBER;
 
+// Email-to-SMS gateways for major US carriers
+const SMS_GATEWAYS = {
+  att: "txt.att.net",
+  tmobile: "tmomail.net",
+  verizon: "vtext.com",
+  sprint: "messaging.sprintpcs.com",
+  uscellular: "email.uscc.net",
+  cricket: "sms.cricketwireless.net",
+  boost: "sms.myboostmobile.com",
+  metro: "mymetropcs.com",
+  mint: "tmomail.net", // Mint uses T-Mobile
+  visible: "vtext.com", // Visible uses Verizon
+};
+
 async function sendTwilioSMS(to, body) {
   if (!TWILIO_SID || !TWILIO_AUTH || !TWILIO_FROM) {
-    console.log("[Alerts] Twilio not configured — skipping SMS");
     return { sent: false, reason: "Twilio not configured" };
   }
 
-  // Clean phone number
   let phone = to.replace(/[\s()-]/g, "");
   if (!phone.startsWith("+")) phone = "+1" + phone.replace(/^\+?1?/, "");
 
@@ -26,27 +38,61 @@ async function sendTwilioSMS(to, body) {
           "Content-Type": "application/x-www-form-urlencoded",
           Authorization: "Basic " + Buffer.from(`${TWILIO_SID}:${TWILIO_AUTH}`).toString("base64"),
         },
-        body: new URLSearchParams({
-          To: phone,
-          From: TWILIO_FROM,
-          Body: body,
-        }),
+        body: new URLSearchParams({ To: phone, From: TWILIO_FROM, Body: body }),
       }
     );
-
     const data = await res.json();
-
     if (data.sid) {
-      console.log(`[Alerts] SMS sent to ${phone} — SID: ${data.sid}`);
+      console.log(`[Alerts] SMS sent via Twilio — SID: ${data.sid}`);
       return { sent: true, sid: data.sid };
-    } else {
-      console.error("[Alerts] Twilio error:", data.message || data);
-      return { sent: false, reason: data.message || "Twilio error" };
     }
+    console.error("[Alerts] Twilio error:", data.message);
+    return { sent: false, reason: data.message || "Twilio error" };
   } catch (error) {
-    console.error("[Alerts] SMS send error:", error.message);
     return { sent: false, reason: error.message };
   }
+}
+
+async function sendEmailSMS(phone, carrier, body) {
+  // Email-to-SMS requires SMTP — use webhook or Resend/SendGrid if configured
+  const RESEND_KEY = process.env.RESEND_API_KEY;
+  const SENDGRID_KEY = process.env.SENDGRID_API_KEY;
+  const FROM_EMAIL = process.env.ALERT_FROM_EMAIL || "alerts@stockpulse.app";
+  
+  const gateway = SMS_GATEWAYS[carrier?.toLowerCase()];
+  if (!gateway) return { sent: false, reason: `Unknown carrier: ${carrier}` };
+  
+  const cleanPhone = phone.replace(/[\s()+\-]/g, "").replace(/^1/, "");
+  const toEmail = `${cleanPhone}@${gateway}`;
+
+  if (RESEND_KEY) {
+    try {
+      const res = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${RESEND_KEY}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ from: FROM_EMAIL, to: toEmail, subject: "", text: body }),
+      });
+      if (res.ok) { console.log(`[Alerts] Email-SMS sent via Resend to ${toEmail}`); return { sent: true }; }
+    } catch {}
+  }
+
+  if (SENDGRID_KEY) {
+    try {
+      const res = await fetch("https://api.sendgrid.com/v3/mail/send", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${SENDGRID_KEY}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          personalizations: [{ to: [{ email: toEmail }] }],
+          from: { email: FROM_EMAIL },
+          subject: "",
+          content: [{ type: "text/plain", value: body }],
+        }),
+      });
+      if (res.ok || res.status === 202) { console.log(`[Alerts] Email-SMS sent via SendGrid to ${toEmail}`); return { sent: true }; }
+    } catch {}
+  }
+
+  return { sent: false, reason: "No email service configured (set RESEND_API_KEY or SENDGRID_API_KEY)" };
 }
 
 // POST — send an alert
@@ -59,14 +105,14 @@ export async function POST(request) {
   const { symbol, message, urgency } = await request.json();
 
   try {
-    // Get user's phone
+    // Get user's phone and carrier
     const { data: user } = await supabaseAdmin
       .from("users")
-      .select("phone, alert_webhook")
+      .select("phone, carrier, alert_webhook")
       .eq("id", session.user.id)
       .single();
 
-    const smsBody = `StockPulse ${urgency === "high" ? "🚨 URGENT" : "📊 Alert"}${symbol ? ` $${symbol}` : ""}: ${message}`;
+    const smsBody = `StockPulse ${urgency === "high" ? "URGENT" : "Alert"}${symbol ? ` $${symbol}` : ""}: ${message}`;
 
     // Store alert
     const { data: alert } = await supabaseAdmin
@@ -83,49 +129,51 @@ export async function POST(request) {
 
     let result = { sent: false };
 
-    // Method 1: Direct Twilio SMS
+    // Method 1: Twilio
     if (user?.phone && TWILIO_SID) {
       result = await sendTwilioSMS(user.phone, smsBody);
       if (result.sent && alert) {
         await supabaseAdmin.from("alerts").update({ sent_via: "twilio" }).eq("id", alert.id);
       }
     }
-    // Method 2: Custom webhook fallback
+    // Method 2: Email-to-SMS gateway
+    else if (user?.phone && user?.carrier) {
+      result = await sendEmailSMS(user.phone, user.carrier, smsBody);
+      if (result.sent && alert) {
+        await supabaseAdmin.from("alerts").update({ sent_via: "email-sms" }).eq("id", alert.id);
+      }
+    }
+    // Method 3: Webhook
     else if (user?.alert_webhook || process.env.ALERT_WEBHOOK_URL) {
-      const webhookUrl = user.alert_webhook || process.env.ALERT_WEBHOOK_URL;
+      const webhookUrl = user?.alert_webhook || process.env.ALERT_WEBHOOK_URL;
       try {
         await fetch(webhookUrl, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            to: user?.phone || "",
-            message: smsBody,
-            symbol,
-            urgency,
-            user_email: session.user.email,
-            timestamp: new Date().toISOString(),
-          }),
+          body: JSON.stringify({ to: user?.phone || "", message: smsBody, symbol, urgency, user_email: session.user.email, timestamp: new Date().toISOString() }),
         });
         result = { sent: true };
-        if (alert) {
-          await supabaseAdmin.from("alerts").update({ sent_via: "webhook" }).eq("id", alert.id);
-        }
-      } catch (e) {
-        console.error("[Alerts] Webhook error:", e.message);
-      }
+        if (alert) await supabaseAdmin.from("alerts").update({ sent_via: "webhook" }).eq("id", alert.id);
+      } catch (e) { console.error("[Alerts] Webhook error:", e.message); }
     }
 
-    if (!result.sent && !user?.phone) {
+    // Tell user what's missing
+    if (!result.sent) {
+      const reasons = [];
+      if (!user?.phone) reasons.push("no phone number in Settings");
+      if (!TWILIO_SID && !user?.carrier) reasons.push("no Twilio config and no carrier selected");
+      if (!TWILIO_SID) reasons.push("Twilio not configured (add TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER to env vars)");
+      if (user?.phone && !user?.carrier && !TWILIO_SID) reasons.push("select your carrier in Settings for free email-to-SMS");
+      
       return NextResponse.json({
         sent: false,
-        message: "Alert saved. Add your phone number in Settings to receive SMS alerts.",
+        alertSaved: !!alert,
+        message: `Alert saved but SMS not sent: ${reasons.join("; ")}`,
+        setup: reasons,
       });
     }
 
-    return NextResponse.json({
-      sent: result.sent,
-      message: result.sent ? "SMS alert sent!" : "Alert saved but SMS delivery failed. Check Settings.",
-    });
+    return NextResponse.json({ sent: true, message: "Alert sent!" });
   } catch (error) {
     console.error("Alert error:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });

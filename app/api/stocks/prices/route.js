@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { getMultiQuotes, getMultiTrades, getBars } from "@/lib/alpaca";
+import { getMultiQuotes, getMultiTrades, getBars, getYahooQuotes } from "@/lib/alpaca";
 import { supabaseAdmin } from "@/lib/supabase";
 
 export async function GET(request) {
@@ -12,22 +12,26 @@ export async function GET(request) {
 
   const { searchParams } = new URL(request.url);
   const symbols = searchParams.get("symbols")?.split(",") || [];
-  const type = searchParams.get("type") || "quote"; // quote | historical
+  const type = searchParams.get("type") || "quote";
 
   try {
     if (type === "quote") {
-      // Get real-time quotes from Alpaca
-      let quotes = await getMultiQuotes(symbols);
+      // Try Yahoo Finance first — real-time, free, no API key
+      let prices = await getYahooQuotes(symbols);
 
-      // If quotes are empty, try trades as fallback
-      if (Object.keys(quotes).length === 0) {
-        console.log("[Prices API] Quotes empty, trying trades fallback...");
-        quotes = await getMultiTrades(symbols);
+      // If Yahoo fails or misses symbols, fallback to Alpaca
+      const missing = symbols.filter((s) => !prices[s]);
+      if (missing.length > 0) {
+        console.log(`[Prices] Yahoo missed ${missing.length} symbols, trying Alpaca...`);
+        let alpacaPrices = await getMultiQuotes(missing);
+        if (Object.keys(alpacaPrices).length === 0) {
+          alpacaPrices = await getMultiTrades(missing);
+        }
+        prices = { ...prices, ...alpacaPrices };
       }
 
-      console.log(`[Prices API] Returning ${Object.keys(quotes).length} quotes`);
-      // Return as both 'prices' and 'quotes' for compatibility
-      return NextResponse.json({ prices: quotes, quotes, signals: {} });
+      console.log(`[Prices] Returning ${Object.keys(prices).length}/${symbols.length} prices`);
+      return NextResponse.json({ prices, quotes: prices, signals: {} });
     }
 
     if (type === "historical") {
