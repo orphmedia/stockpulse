@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useSession } from "next-auth/react";
 
-export default function AIChat({ prices, news, signals, watchlist, portfolio, socialData, onWatchlistUpdate, onPortfolioUpdate, inline }) {
+export default function AIChat({ prices, news, signals, watchlist, portfolio, socialData, onWatchlistUpdate, onPortfolioUpdate }) {
   const { data: session } = useSession();
   const firstName = session?.user?.name?.split(" ")[0] || "there";
 
@@ -13,38 +13,36 @@ export default function AIChat({ prices, news, signals, watchlist, portfolio, so
   const [isRecording, setIsRecording] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [voiceEnabled, setVoiceEnabled] = useState(true);
+  const [voiceMode, setVoiceMode] = useState(false); // continuous voice conversation
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
   const recognitionRef = useRef(null);
   const audioRef = useRef(null);
-  const speakingSourceRef = useRef(null);
   const welcomeSent = useRef(false);
+  const voiceModeRef = useRef(false); // ref to track voice mode in callbacks
 
   const scrollToBottom = () => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   useEffect(() => { scrollToBottom(); }, [messages]);
-  useEffect(() => { inputRef.current?.focus(); }, []);
+  useEffect(() => { if (!voiceMode) inputRef.current?.focus(); }, [voiceMode]);
 
   // ═══ WELCOME MESSAGE ═══
   useEffect(() => {
     if (welcomeSent.current) return;
     welcomeSent.current = true;
-
     const hour = new Date().getHours();
     const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
     const holdingsCount = portfolio?.length || 0;
     const watchCount = watchlist?.length || 0;
 
-    let welcomeText = `${greeting}, ${firstName}! I'm your StockPulse AI assistant. `;
-
+    let text = `${greeting}, ${firstName}! I'm your StockPulse AI assistant. `;
     if (holdingsCount > 0 && watchCount > 0) {
-      welcomeText += `You have ${holdingsCount} stocks in your portfolio and ${watchCount} on your watchlist. Ask me anything — how your portfolio is doing, what to buy, analysis on any stock, or just tell me to add something to your watchlist.`;
+      text += `You have ${holdingsCount} stocks in your portfolio and ${watchCount} on your watchlist. Ask me anything — how your portfolio is doing, what to buy, or just chat.`;
     } else if (holdingsCount > 0) {
-      welcomeText += `You have ${holdingsCount} stocks in your portfolio. Ask me how they're doing, what to buy next, or tell me to watch a stock.`;
+      text += `You have ${holdingsCount} stocks in your portfolio. Ask me how they're doing or what to buy next.`;
     } else {
-      welcomeText += `Let's get started! Tell me what stocks you're interested in, and I'll help you build your watchlist and portfolio. Try saying "add NVDA to my watchlist" or "what's a good tech stock to buy?"`;
+      text += `Let's build your portfolio! Tell me what stocks you're interested in, or say "what should I buy?"`;
     }
-
-    setMessages([{ role: "assistant", content: welcomeText }]);
+    setMessages([{ role: "assistant", content: text }]);
   }, [firstName, portfolio, watchlist]);
 
   // ═══ VOICE SETTINGS ═══
@@ -55,20 +53,21 @@ export default function AIChat({ prices, news, signals, watchlist, portfolio, so
     } catch {}
   }, []);
 
-  // ═══ SPEECH SYNTHESIS — ElevenLabs or browser fallback ═══
+  // ═══ SPEECH SYNTHESIS ═══
   const speak = async (text) => {
-    if (typeof window === "undefined" || !voiceEnabled) return;
+    if (typeof window === "undefined" || !voiceEnabled) {
+      // If voice is off but we're in voice mode, still restart listening
+      if (voiceModeRef.current) startListening();
+      return;
+    }
 
     const cleanText = text
       .replace(/[→📊💼🔍🎙️●✓✗👁🔴♪📷🔥⚠️▲▼⭐]/g, "")
       .replace(/\$([A-Z]+)/g, "$1")
-      .replace(/\*\*/g, "")
-      .replace(/\+/g, " plus ")
-      .replace(/-(\d)/g, " minus $1")
-      .replace(/\n+/g, ". ")
-      .trim();
+      .replace(/\*\*/g, "").replace(/\+/g, " plus ")
+      .replace(/-(\d)/g, " minus $1").replace(/\n+/g, ". ").trim();
 
-    if (!cleanText) return;
+    if (!cleanText) { if (voiceModeRef.current) startListening(); return; }
     stopSpeaking();
 
     try {
@@ -77,34 +76,50 @@ export default function AIChat({ prices, news, signals, watchlist, portfolio, so
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: cleanText }),
       });
-
       if (res.ok && res.headers.get("content-type")?.includes("audio")) {
         const blob = await res.blob();
         const url = URL.createObjectURL(blob);
         const audio = new Audio(url);
         audioRef.current = audio;
-        audio.playbackRate = 1.5; // 1.5x speed
+        audio.playbackRate = 1.15;
         audio.onplay = () => setIsSpeaking(true);
-        audio.onended = () => { setIsSpeaking(false); URL.revokeObjectURL(url); audioRef.current = null; };
-        audio.onerror = () => { setIsSpeaking(false); URL.revokeObjectURL(url); audioRef.current = null; };
+        audio.onended = () => {
+          setIsSpeaking(false);
+          URL.revokeObjectURL(url);
+          audioRef.current = null;
+          // Auto-restart listening in voice mode
+          if (voiceModeRef.current) setTimeout(() => startListening(), 300);
+        };
+        audio.onerror = () => {
+          setIsSpeaking(false);
+          URL.revokeObjectURL(url);
+          audioRef.current = null;
+          if (voiceModeRef.current) startListening();
+        };
         await audio.play();
         return;
       }
     } catch {}
 
     // Fallback: browser voice
-    if (!window.speechSynthesis) return;
+    if (!window.speechSynthesis) { if (voiceModeRef.current) startListening(); return; }
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(cleanText);
-    utterance.rate = 1.5;
+    utterance.rate = 1.15;
     utterance.pitch = 0.9;
     const voices = window.speechSynthesis.getVoices();
     const preferred = voices.find((v) => v.name.includes("Daniel") || v.name.includes("Google UK English Male"))
       || voices.find((v) => v.lang.startsWith("en")) || voices[0];
     if (preferred) utterance.voice = preferred;
     utterance.onstart = () => setIsSpeaking(true);
-    utterance.onend = () => setIsSpeaking(false);
-    utterance.onerror = () => setIsSpeaking(false);
+    utterance.onend = () => {
+      setIsSpeaking(false);
+      if (voiceModeRef.current) setTimeout(() => startListening(), 300);
+    };
+    utterance.onerror = () => {
+      setIsSpeaking(false);
+      if (voiceModeRef.current) startListening();
+    };
     window.speechSynthesis.speak(utterance);
   };
 
@@ -131,21 +146,60 @@ export default function AIChat({ prices, news, signals, watchlist, portfolio, so
         setTimeout(() => submitMessage(transcript), 200);
       }
     };
-    recognition.onerror = () => setIsRecording(false);
-    recognition.onend = () => setIsRecording(false);
+    recognition.onerror = (e) => {
+      console.log("Speech error:", e.error);
+      setIsRecording(false);
+      // In voice mode, retry on "no-speech" errors
+      if (voiceModeRef.current && e.error === "no-speech") {
+        setTimeout(() => startListening(), 500);
+      }
+    };
+    recognition.onend = () => {
+      setIsRecording(false);
+    };
     recognitionRef.current = recognition;
   }, []);
 
-  const toggleRecording = () => {
-    if (!recognitionRef.current) return;
-    if (isRecording) {
-      recognitionRef.current.stop();
-      setIsRecording(false);
-    } else {
+  const startListening = () => {
+    if (!recognitionRef.current || isRecording || isSpeaking || loading) return;
+    try {
       stopSpeaking();
       setInput("");
       recognitionRef.current.start();
       setIsRecording(true);
+    } catch (e) {
+      console.log("Recognition start error:", e);
+    }
+  };
+
+  const stopListening = () => {
+    if (recognitionRef.current && isRecording) {
+      recognitionRef.current.stop();
+      setIsRecording(false);
+    }
+  };
+
+  // Toggle voice mode (continuous conversation)
+  const toggleVoiceMode = () => {
+    const newMode = !voiceMode;
+    setVoiceMode(newMode);
+    voiceModeRef.current = newMode;
+    if (newMode) {
+      startListening();
+    } else {
+      stopListening();
+      stopSpeaking();
+    }
+  };
+
+  // One-tap mic (when not in voice mode)
+  const tapMic = () => {
+    if (voiceMode) {
+      toggleVoiceMode(); // exit voice mode
+    } else if (isRecording) {
+      stopListening();
+    } else {
+      startListening();
     }
   };
 
@@ -158,8 +212,7 @@ export default function AIChat({ prices, news, signals, watchlist, portfolio, so
     setLoading(true);
 
     try {
-      const history = messages
-        .slice(1)
+      const history = messages.slice(1)
         .filter((m) => (m.role === "user" || m.role === "assistant") && !m.isError)
         .slice(-20)
         .map((m) => ({ role: m.role, content: m.content }));
@@ -168,9 +221,7 @@ export default function AIChat({ prices, news, signals, watchlist, portfolio, so
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          message: userMsg,
-          history,
-          prices,
+          message: userMsg, history, prices,
           news: (news || []).slice(0, 15),
           signals, watchlist, portfolio, socialData,
         }),
@@ -178,41 +229,35 @@ export default function AIChat({ prices, news, signals, watchlist, portfolio, so
       const data = await res.json();
 
       if (data.response) {
-        // Typewriter effect — stream words in
+        // Typewriter effect
         const fullText = data.response;
         const words = fullText.split(" ");
-        const msgIndex = messages.length + 1; // +1 for the user message we just added
-        
-        // Add empty assistant message first
         setMessages((prev) => [...prev, { role: "assistant", content: "", actions: data.actions, _typing: true }]);
-        
+
         let currentText = "";
         for (let i = 0; i < words.length; i++) {
           currentText += (i === 0 ? "" : " ") + words[i];
-          const textSoFar = currentText;
-          await new Promise((r) => setTimeout(r, 30)); // 30ms per word
+          const snapshot = currentText;
+          await new Promise((r) => setTimeout(r, 25));
           setMessages((prev) => {
             const updated = [...prev];
-            const lastMsg = updated[updated.length - 1];
-            if (lastMsg?.role === "assistant" && lastMsg._typing) {
-              updated[updated.length - 1] = { ...lastMsg, content: textSoFar };
-            }
+            const last = updated[updated.length - 1];
+            if (last?._typing) updated[updated.length - 1] = { ...last, content: snapshot };
             return updated;
           });
         }
-        
-        // Mark typing complete
+
+        // Mark done
         setMessages((prev) => {
           const updated = [...prev];
-          const lastMsg = updated[updated.length - 1];
-          if (lastMsg?._typing) {
-            updated[updated.length - 1] = { ...lastMsg, _typing: false };
-          }
+          const last = updated[updated.length - 1];
+          if (last?._typing) updated[updated.length - 1] = { ...last, _typing: false };
           return updated;
         });
-        
+
         speak(fullText);
 
+        // Execute actions
         if (data.actions?.length > 0) {
           for (const action of data.actions) {
             if (action.type === "add_to_watchlist" || action.type === "monitor") {
@@ -223,7 +268,7 @@ export default function AIChat({ prices, news, signals, watchlist, portfolio, so
                 body: JSON.stringify({ symbol: action.symbol }) });
             } else if (action.type === "add_to_portfolio") {
               await fetch("/api/portfolio", { method: "POST", headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ symbol: action.symbol, shares: action.shares || 0, avg_cost: action.avg_cost || action.price || 0, name: action.name || action.symbol, sector: action.sector || "Unknown" }) });
+                body: JSON.stringify({ symbol: action.symbol, shares: action.shares || 0, avg_cost: action.avg_cost || 0, name: action.name || action.symbol, sector: action.sector || "Unknown" }) });
               if (onPortfolioUpdate) onPortfolioUpdate();
             } else if (action.type === "remove_from_portfolio") {
               await fetch("/api/portfolio", { method: "DELETE", headers: { "Content-Type": "application/json" },
@@ -238,15 +283,18 @@ export default function AIChat({ prices, news, signals, watchlist, portfolio, so
         }
       } else {
         setMessages((prev) => [...prev, { role: "assistant", content: data.error || "Something went wrong.", isError: true }]);
+        if (voiceModeRef.current) setTimeout(() => startListening(), 1000);
       }
     } catch {
       setMessages((prev) => [...prev, { role: "assistant", content: "Connection issue. Try again.", isError: true }]);
+      if (voiceModeRef.current) setTimeout(() => startListening(), 1000);
     }
     setLoading(false);
   };
 
   const handleSubmit = (e) => { e.preventDefault(); submitMessage(); };
 
+  // ═══ RENDER ═══
   return (
     <div className="bg-card border border-border rounded-2xl overflow-hidden flex flex-col" style={{ minHeight: "600px", maxHeight: "80vh" }}>
       {/* Header */}
@@ -260,22 +308,42 @@ export default function AIChat({ prices, news, signals, watchlist, portfolio, so
           <div>
             <span className="font-semibold text-sm">StockPulse AI</span>
             <div className="flex items-center gap-1.5">
-              <span className={`w-1.5 h-1.5 rounded-full ${isSpeaking ? "bg-blue-500 animate-pulse" : isRecording ? "bg-red-500 animate-pulse" : "bg-emerald-500"}`} />
+              <span className={`w-1.5 h-1.5 rounded-full ${
+                voiceMode ? "bg-blue-500 animate-pulse"
+                : isSpeaking ? "bg-blue-500 animate-pulse"
+                : isRecording ? "bg-red-500 animate-pulse"
+                : "bg-emerald-500"
+              }`} />
               <span className="text-[10px] text-muted-foreground">
-                {isSpeaking ? "Speaking..." : isRecording ? "Listening..." : `Ready for you, ${firstName}`}
+                {voiceMode ? (isSpeaking ? "Speaking..." : isRecording ? "Listening..." : loading ? "Thinking..." : "Voice mode — speak anytime")
+                  : isSpeaking ? "Speaking..." : isRecording ? "Listening..."
+                  : `Ready, ${firstName}`}
               </span>
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1.5">
+          {/* Voice mode toggle */}
+          <button onClick={toggleVoiceMode}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-semibold transition-all ${
+              voiceMode
+                ? "bg-blue-500 text-white shadow-lg shadow-blue-500/30"
+                : "bg-accent text-muted-foreground hover:text-foreground"
+            }`}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z" />
+              <path d="M19 10v2a7 7 0 01-14 0v-2" />
+            </svg>
+            {voiceMode ? "Voice On" : "Voice"}
+          </button>
+          {/* Speaker toggle */}
           <button onClick={() => {
             const newVal = !voiceEnabled;
             setVoiceEnabled(newVal);
             if (isSpeaking) stopSpeaking();
             try { const s = JSON.parse(localStorage.getItem("stockpulse_settings") || "{}"); s.voiceEnabled = newVal; localStorage.setItem("stockpulse_settings", JSON.stringify(s)); } catch {}
           }}
-            className={`w-8 h-8 flex items-center justify-center rounded-lg transition-colors ${voiceEnabled ? "text-blue-400 hover:bg-blue-500/10" : "text-muted-foreground hover:bg-accent"}`}
-            title={voiceEnabled ? "Voice on" : "Voice off"}>
+            className={`w-8 h-8 flex items-center justify-center rounded-lg transition-colors ${voiceEnabled ? "text-blue-400 hover:bg-blue-500/10" : "text-muted-foreground hover:bg-accent"}`}>
             {voiceEnabled ? (
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" /><path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07" /></svg>
             ) : (
@@ -289,6 +357,51 @@ export default function AIChat({ prices, news, signals, watchlist, portfolio, so
           )}
         </div>
       </div>
+
+      {/* Input at TOP */}
+      <form onSubmit={handleSubmit} className="px-4 py-3 border-b border-border flex-shrink-0 bg-background/50">
+        <div className="flex items-center gap-2">
+          <button type="button" onClick={tapMic}
+            className={`w-10 h-10 flex items-center justify-center rounded-xl transition-all flex-shrink-0 ${
+              isRecording ? "bg-red-500 text-white animate-pulse"
+              : voiceMode ? "bg-blue-500/20 text-blue-400"
+              : "bg-accent hover:bg-accent/80 text-muted-foreground"
+            }`}>
+            {isRecording ? (
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2" /></svg>
+            ) : (
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z" />
+                <path d="M19 10v2a7 7 0 01-14 0v-2" /><line x1="12" y1="19" x2="12" y2="23" /><line x1="8" y1="23" x2="16" y2="23" />
+              </svg>
+            )}
+          </button>
+          <input ref={inputRef} type="text" value={input} onChange={(e) => setInput(e.target.value)}
+            placeholder={voiceMode ? (isRecording ? "Listening..." : "Voice mode active — speak anytime") : `Ask me anything, ${firstName}...`}
+            className={`flex-1 px-4 py-2.5 bg-background border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary ${
+              isRecording ? "border-red-500/50 bg-red-500/5" : voiceMode ? "border-blue-500/30 bg-blue-500/5" : "border-border"
+            }`} disabled={loading || voiceMode} />
+          <button type="submit" disabled={loading || !input.trim() || voiceMode}
+            className="w-10 h-10 bg-primary text-primary-foreground rounded-xl flex items-center justify-center hover:opacity-90 disabled:opacity-50 transition-all flex-shrink-0">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" />
+            </svg>
+          </button>
+        </div>
+        {voiceMode && (
+          <div className="flex items-center justify-center gap-2 mt-2">
+            <div className={`flex gap-1 ${isRecording ? "opacity-100" : "opacity-40"}`}>
+              {[...Array(5)].map((_, i) => (
+                <div key={i} className={`w-1 rounded-full bg-blue-500 transition-all ${isRecording ? "animate-pulse" : ""}`}
+                  style={{ height: isRecording ? `${12 + Math.random() * 12}px` : "4px", animationDelay: `${i * 100}ms` }} />
+              ))}
+            </div>
+            <span className="text-[10px] text-blue-400 font-mono">
+              {isSpeaking ? "AI speaking..." : isRecording ? "Listening..." : loading ? "Thinking..." : "Ready — just start talking"}
+            </span>
+          </div>
+        )}
+      </form>
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
@@ -338,37 +451,6 @@ export default function AIChat({ prices, news, signals, watchlist, portfolio, so
         )}
         <div ref={messagesEndRef} />
       </div>
-
-      {/* Input */}
-      <form onSubmit={handleSubmit} className="p-3 border-t border-border flex-shrink-0">
-        <div className="flex items-center gap-2">
-          <button type="button" onClick={toggleRecording}
-            className={`w-10 h-10 flex items-center justify-center rounded-xl transition-all flex-shrink-0 ${
-              isRecording ? "bg-red-500 text-white animate-pulse" : "bg-accent hover:bg-accent/80 text-muted-foreground"
-            }`}>
-            {isRecording ? (
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2" /></svg>
-            ) : (
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z" />
-                <path d="M19 10v2a7 7 0 01-14 0v-2" /><line x1="12" y1="19" x2="12" y2="23" /><line x1="8" y1="23" x2="16" y2="23" />
-              </svg>
-            )}
-          </button>
-          <input ref={inputRef} type="text" value={input} onChange={(e) => setInput(e.target.value)}
-            placeholder={isRecording ? "Listening..." : `Ask me anything, ${firstName}...`}
-            className={`flex-1 px-4 py-2.5 bg-background border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary ${
-              isRecording ? "border-red-500/50 bg-red-500/5" : "border-border"
-            }`} disabled={loading} />
-          <button type="submit" disabled={loading || !input.trim()}
-            className="w-10 h-10 bg-primary text-primary-foreground rounded-xl flex items-center justify-center hover:opacity-90 disabled:opacity-50 transition-all flex-shrink-0">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" />
-            </svg>
-          </button>
-        </div>
-        {isRecording && <p className="text-[10px] text-red-500 mt-1.5 text-center font-mono animate-pulse">● Listening — speak now...</p>}
-      </form>
     </div>
   );
 }
