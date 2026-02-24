@@ -16,6 +16,7 @@ export async function GET() {
 
   // Test a simple API call
   try {
+    const t0 = Date.now();
     const res = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
@@ -24,7 +25,7 @@ export async function GET() {
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
+        model: process.env.CHAT_MODEL || "claude-3-5-haiku-20241022",
         max_tokens: 100,
         messages: [{ role: "user", content: "Say hello in one sentence." }],
       }),
@@ -46,6 +47,7 @@ export async function GET() {
       ...diagnostics,
       status: "OK",
       model: data.model,
+      latencyMs: Date.now() - t0,
       stopReason: data.stop_reason,
       responsePreview: text.slice(0, 100),
       contentBlocks: data.content?.length,
