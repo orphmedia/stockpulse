@@ -165,11 +165,26 @@ export default function AIChat({ prices, news, signals, watchlist, portfolio, so
     try {
       const history = messages.slice(1).filter((m) => (m.role === "user" || m.role === "assistant") && !m.isError).slice(-20).map((m) => ({ role: m.role, content: m.content }));
 
+      console.log("[StockPulse] Sending chat:", userMsg, "history:", history.length);
+
       const res = await fetch("/api/ai/chat", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: userMsg, history, prices, news: (news || []).slice(0, 15), signals, watchlist, portfolio, socialData }),
       });
+
+      console.log("[StockPulse] Response status:", res.status);
+
+      if (!res.ok) {
+        const errorText = await res.text();
+        console.error("[StockPulse] HTTP error:", res.status, errorText.slice(0, 200));
+        setMessages((prev) => [...prev, { role: "assistant", content: `Error ${res.status}: ${res.statusText}. Check your API key and Vercel logs.`, isError: true }]);
+        setLoading(false);
+        if (voiceModeRef.current) setTimeout(startListening, 1000);
+        return;
+      }
+
       const data = await res.json();
+      console.log("[StockPulse] Got response:", data.response?.slice(0, 80), "actions:", data.actions?.length || 0);
 
       if (data.response) {
         // Typewriter
