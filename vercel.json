@@ -1,4 +1,9 @@
 {
+  "functions": {
+    "app/api/ai/**": {
+      "maxDuration": 60
+    }
+  },
   "crons": [
     {
       "path": "/api/cron/aggregate",

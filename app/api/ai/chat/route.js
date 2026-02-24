@@ -3,6 +3,8 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/supabase";
 
+export const maxDuration = 60; // Allow up to 60s for web search + AI response
+
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 
 // Strip all citation/HTML markup from text
@@ -139,23 +141,35 @@ CRITICAL RULES:
     // ═══ BUILD MESSAGES ═══
     const apiMessages = [];
     if (history && history.length > 0) {
+      let lastRole = null;
       for (const msg of history) {
+        // Ensure strict alternation — skip consecutive same-role messages
+        if (msg.role === lastRole) continue;
         if (msg.role === "user") {
           apiMessages.push({ role: "user", content: msg.content });
         } else if (msg.role === "assistant") {
+          // Send as plain JSON so the model knows the format
           apiMessages.push({
             role: "assistant",
             content: JSON.stringify({ response: msg.content, actions: [] }),
           });
         }
+        lastRole = msg.role;
       }
+    }
+    // Ensure last message before new one isn't also "user"
+    if (apiMessages.length > 0 && apiMessages[apiMessages.length - 1].role === "user") {
+      apiMessages.pop(); // Remove duplicate user turn
     }
     apiMessages.push({ role: "user", content: message });
 
     // ═══ API CALL — smart web search ═══
-    // Only include web search for questions that need current/external data
-    const needsSearch = /\b(news|today|current|latest|price|buy|sell|recommend|discover|what.*(happening|going on)|market|earnings|analyst|upgrade|downgrade)\b/i.test(message);
+    // Include web search for anything about stocks, crypto, markets, or asking for analysis
+    const skipSearch = /^(hi|hello|hey|thanks|thank you|ok|okay|sure|yes|no|cool|got it|what can you do)/i.test(message.trim());
+    const needsSearch = !skipSearch;
     const tools = needsSearch ? [{ type: "web_search_20250305", name: "web_search" }] : [];
+
+    console.log("[AI Chat] Sending", apiMessages.length, "messages, search:", needsSearch);
 
     let finalText = "";
     let currentMessages = [...apiMessages];
@@ -185,17 +199,25 @@ CRITICAL RULES:
 
       if (data.error) {
         console.error("[AI Chat] API error:", JSON.stringify(data.error));
-        break;
+        // Return helpful error instead of generic fallback
+        return NextResponse.json({
+          response: `Sorry ${userName.split(" ")[0]}, I hit a snag. Let me try that differently — ask me again?`,
+          actions: [],
+        });
       }
 
-      // Extract text blocks
+      console.log("[AI Chat] stop_reason:", data.stop_reason, "content_blocks:", data.content?.length);
+
+      // Extract text from ALL content blocks
       for (const block of data.content || []) {
         if (block.type === "text" && block.text) {
           finalText += block.text;
         }
       }
 
-      // If stop_reason is "end_turn" or we got text, we're done
+      console.log("[AI Chat] Got text length:", finalText.length, "stop:", data.stop_reason);
+
+      // Done if we got text or reached end_turn
       if (data.stop_reason === "end_turn" || finalText.length > 0) {
         break;
       }
