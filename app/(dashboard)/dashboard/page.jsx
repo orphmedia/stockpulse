@@ -5,6 +5,7 @@ import { useSession } from "next-auth/react";
 import AIChat from "@/components/dashboard/AIChat";
 import DailyPicks from "@/components/dashboard/DailyPicks";
 import PortfolioWidget from "@/components/dashboard/PortfolioWidget";
+import MarketIntelligence from "@/components/dashboard/MarketIntelligence";
 
 const REFRESH_INTERVALS = { "5s": 5000, "10s": 10000, "30s": 30000, "1m": 60000 };
 const MARKET_INDICES = [
@@ -121,8 +122,16 @@ export default function DashboardPage() {
           />
         </div>
 
-        {/* Right Panel */}
+        {/* Right Panel — Intelligence + Data */}
         <div className="space-y-4">
+          {/* Market Intelligence — auto-loads on login */}
+          <MarketIntelligence
+            prices={prices}
+            portfolio={portfolioHoldings}
+            watchlist={watchlistData}
+            onAddWatchlist={handleDataUpdate}
+          />
+
           {/* Panel Tabs */}
           <div className="flex gap-1 bg-card border border-border rounded-xl p-1">
             {[
