@@ -25,7 +25,7 @@ export async function GET() {
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: process.env.CHAT_MODEL || "claude-sonnet-4-20250514",
+        model: process.env.CHAT_MODEL || "claude-haiku-4-5-20251001",
         max_tokens: 100,
         messages: [{ role: "user", content: "Say hello in one sentence." }],
       }),

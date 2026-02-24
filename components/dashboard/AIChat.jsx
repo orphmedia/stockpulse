@@ -65,17 +65,26 @@ export default function AIChat({ prices, news, signals, watchlist, portfolio, so
     setMessages([{ role: "assistant", content: t }]);
   }, [firstName, portfolio]);
 
-  // Voice settings
+  // Voice settings + preload voices
+  const voicesRef = useRef([]);
   useEffect(() => {
     try { if (JSON.parse(localStorage.getItem("stockpulse_settings") || "{}").voiceEnabled === false) setVoiceEnabled(false); } catch {}
+    // Preload browser voices
+    if (typeof window !== "undefined" && window.speechSynthesis) {
+      const loadVoices = () => { voicesRef.current = window.speechSynthesis.getVoices(); };
+      loadVoices();
+      window.speechSynthesis.onvoiceschanged = loadVoices;
+    }
   }, []);
 
-  // ═══ SPEECH ═══
+  // ═══ SPEECH — ElevenLabs with browser TTS fallback ═══
   const speak = async (text) => {
     if (!voiceEnabled || typeof window === "undefined") { if (voiceModeRef.current) startListening(); return; }
     const clean = text.replace(/[→📊💼🔍✓✗▲▼⭐]/g, "").replace(/\$([A-Z]+)/g, "$1").replace(/\*\*/g, "").replace(/\n+/g, ". ").trim();
     if (!clean) { if (voiceModeRef.current) startListening(); return; }
     stopSpeaking();
+
+    // Try ElevenLabs first (better quality voice)
     try {
       const r = await fetch("/api/ai/speak", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: clean }) });
       if (r.ok && r.headers.get("content-type")?.includes("audio")) {
@@ -83,20 +92,27 @@ export default function AIChat({ prices, news, signals, watchlist, portfolio, so
         const a = new Audio(url); audioRef.current = a; a.playbackRate = 1.15;
         a.onplay = () => setIsSpeaking(true);
         a.onended = () => { setIsSpeaking(false); URL.revokeObjectURL(url); audioRef.current = null; if (voiceModeRef.current) setTimeout(startListening, 300); };
-        a.onerror = () => { setIsSpeaking(false); if (voiceModeRef.current) startListening(); };
+        a.onerror = () => { setIsSpeaking(false); URL.revokeObjectURL(url); audioRef.current = null; if (voiceModeRef.current) startListening(); };
         await a.play(); return;
       }
-    } catch {}
-    // Browser fallback
-    if (!window.speechSynthesis) { if (voiceModeRef.current) startListening(); return; }
-    window.speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(clean); u.rate = 1.15; u.pitch = 0.9;
-    const v = window.speechSynthesis.getVoices(); const p = v.find((x) => x.name.includes("Daniel") || x.name.includes("Google UK")) || v.find((x) => x.lang.startsWith("en")) || v[0];
-    if (p) u.voice = p;
-    u.onstart = () => setIsSpeaking(true);
-    u.onend = () => { setIsSpeaking(false); if (voiceModeRef.current) setTimeout(startListening, 300); };
-    u.onerror = () => { setIsSpeaking(false); if (voiceModeRef.current) startListening(); };
-    window.speechSynthesis.speak(u);
+    } catch (e) { console.log("[Voice] ElevenLabs failed, using browser TTS:", e.message); }
+
+    // Browser TTS fallback
+    if (window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(clean); u.rate = 1.1; u.pitch = 0.95;
+      const voices = voicesRef.current.length > 0 ? voicesRef.current : window.speechSynthesis.getVoices();
+      const pref = voices.find((x) => x.name.includes("Samantha") || x.name.includes("Daniel") || x.name.includes("Google UK"))
+        || voices.find((x) => x.lang.startsWith("en") && x.name.includes("Google"))
+        || voices.find((x) => x.lang.startsWith("en")) || voices[0];
+      if (pref) u.voice = pref;
+      u.onstart = () => setIsSpeaking(true);
+      u.onend = () => { setIsSpeaking(false); if (voiceModeRef.current) setTimeout(startListening, 300); };
+      u.onerror = () => { setIsSpeaking(false); if (voiceModeRef.current) startListening(); };
+      window.speechSynthesis.speak(u);
+    } else if (voiceModeRef.current) {
+      startListening();
+    }
   };
   const stopSpeaking = () => {
     if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }

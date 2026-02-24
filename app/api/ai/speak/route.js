@@ -1,18 +1,10 @@
 import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 
 const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
 const ELEVENLABS_VOICE_ID = process.env.ELEVENLABS_VOICE_ID || "DXFkLCBUTmvXpp2QwZjA";
 
 export async function POST(request) {
-  const session = await getServerSession(authOptions);
-  if (!session) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
   if (!ELEVENLABS_API_KEY) {
-    console.log("[ElevenLabs] No API key configured");
     return NextResponse.json({ error: "ElevenLabs not configured" }, { status: 503 });
   }
 
@@ -22,8 +14,8 @@ export async function POST(request) {
     return NextResponse.json({ error: "Text required (max 5000 chars)" }, { status: 400 });
   }
 
-  // Try models in order of preference
-  const models = ["eleven_multilingual_v2", "eleven_turbo_v2_5", "eleven_monolingual_v1"];
+  // Try models in order: turbo (fastest), multilingual, monolingual
+  const models = ["eleven_turbo_v2_5", "eleven_multilingual_v2", "eleven_monolingual_v1"];
 
   for (const model of models) {
     try {

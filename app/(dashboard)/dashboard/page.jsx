@@ -5,9 +5,7 @@ import { useSession } from "next-auth/react";
 import AIChat from "@/components/dashboard/AIChat";
 import DailyPicks from "@/components/dashboard/DailyPicks";
 import PortfolioWidget from "@/components/dashboard/PortfolioWidget";
-import MarketIntelligence from "@/components/dashboard/MarketIntelligence";
 
-const REFRESH_INTERVALS = { "5s": 5000, "10s": 10000, "30s": 30000, "1m": 60000 };
 const MARKET_INDICES = [
   { symbol: "SPY", name: "S&P 500" },
   { symbol: "QQQ", name: "Nasdaq" },
@@ -27,12 +25,9 @@ export default function DashboardPage() {
   const [watchlistData, setWatchlistData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [lastUpdate, setLastUpdate] = useState(null);
-  const [refreshRate] = useState("10s");
   const [isLive, setIsLive] = useState(true);
   const [portfolioKey, setPortfolioKey] = useState(0);
-  const [sidePanel, setSidePanel] = useState("discoveries"); // discoveries | portfolio | watchlist
   const intervalRef = useRef(null);
-  const newsIntervalRef = useRef(null);
 
   const allSymbols = [...new Set([...portfolioSymbols, ...watchlistSymbols, ...MARKET_INDICES.map((i) => i.symbol)])];
   const symbolsParam = allSymbols.length > 0 ? allSymbols.join(",") : "SPY,QQQ,DIA";
@@ -49,7 +44,6 @@ export default function DashboardPage() {
   }, [portfolioKey]);
 
   const fetchPrices = useCallback(async () => {
-    if (!symbolsParam) return;
     try {
       const r = await fetch(`/api/stocks/prices?symbols=${symbolsParam}`);
       if (r.ok) { const d = await r.json(); setPrevPrices((p) => ({ ...p, ...prices })); setPrices(d.prices || {}); setSignals(d.signals || {}); setLastUpdate(new Date()); setLoading(false); }
@@ -64,31 +58,20 @@ export default function DashboardPage() {
     } catch {}
   }, [allSymbols.join(",")]);
 
-  const fetchSocial = useCallback(async () => {
-    try {
-      const s = allSymbols.filter((x) => !["SPY", "QQQ", "DIA"].includes(x)).slice(0, 5).join(",");
-      if (!s) return;
-      const r = await fetch(`/api/social?symbols=${s}`);
-      if (r.ok) setSocialData(await r.json());
-    } catch {}
-  }, [allSymbols.join(",")]);
-
-  useEffect(() => { fetchPrices(); fetchNews(); fetchSocial(); }, [symbolsParam]);
-  useEffect(() => { if (!isLive) { clearInterval(intervalRef.current); return; } intervalRef.current = setInterval(fetchPrices, REFRESH_INTERVALS[refreshRate]); return () => clearInterval(intervalRef.current); }, [fetchPrices, isLive, refreshRate]);
-  useEffect(() => { newsIntervalRef.current = setInterval(fetchNews, 120000); return () => clearInterval(newsIntervalRef.current); }, [fetchNews]);
+  useEffect(() => { fetchPrices(); fetchNews(); }, [symbolsParam]);
+  useEffect(() => { if (!isLive) { clearInterval(intervalRef.current); return; } intervalRef.current = setInterval(fetchPrices, 10000); return () => clearInterval(intervalRef.current); }, [fetchPrices, isLive]);
 
   const handleDataUpdate = () => setPortfolioKey((k) => k + 1);
 
   return (
     <div className="space-y-4 p-4 sm:p-6 max-w-7xl mx-auto">
-      {/* Compact Header */}
+      {/* Header with indices */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-4">
           <h1 className="text-lg font-bold">StockPulse</h1>
-          <div className="flex gap-2">
+          <div className="hidden sm:flex gap-3">
             {MARKET_INDICES.map((idx) => {
-              const p = prices[idx.symbol];
-              const prev = prevPrices[idx.symbol];
+              const p = prices[idx.symbol]; const prev = prevPrices[idx.symbol];
               const ch = p?.price && prev?.price ? ((p.price - prev.price) / prev.price * 100) : 0;
               return (
                 <div key={idx.symbol} className="flex items-center gap-1.5 text-[11px] font-mono">
@@ -109,79 +92,46 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Main: Chat (2/3) + Side Panel (1/3) */}
+      {/* Main Layout: Chat (2/3) + Right Column (1/3) */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-        {/* Chat — 2 columns, conversation-first */}
+        {/* Left 2/3: Chat */}
         <div className="col-span-1 lg:col-span-2">
-          <AIChat
-            prices={prices} news={news} signals={signals}
-            watchlist={watchlistData} portfolio={portfolioHoldings}
-            socialData={socialData}
-            onWatchlistUpdate={handleDataUpdate}
-            onPortfolioUpdate={handleDataUpdate}
-          />
+          <AIChat prices={prices} news={news} signals={signals} watchlist={watchlistData} portfolio={portfolioHoldings} socialData={socialData} onWatchlistUpdate={handleDataUpdate} onPortfolioUpdate={handleDataUpdate} />
         </div>
 
-        {/* Right Panel — Intelligence + Data */}
-        <div className="space-y-4">
-          {/* Market Intelligence — auto-loads on login */}
-          <MarketIntelligence
-            prices={prices}
-            portfolio={portfolioHoldings}
-            watchlist={watchlistData}
-            onAddWatchlist={handleDataUpdate}
-          />
+        {/* Right 1/3: Always visible - Portfolio, Watchlist, Discoveries */}
+        <div className="space-y-4 overflow-y-auto" style={{ maxHeight: "85vh" }}>
+          {/* Portfolio */}
+          <PortfolioWidget key={portfolioKey} prices={prices} signals={signals} />
 
-          {/* Panel Tabs */}
-          <div className="flex gap-1 bg-card border border-border rounded-xl p-1">
-            {[
-              { id: "discoveries", label: "Picks" },
-              { id: "portfolio", label: "Portfolio" },
-              { id: "watchlist", label: "Watchlist" },
-            ].map((t) => (
-              <button key={t.id} onClick={() => setSidePanel(t.id)}
-                className={`flex-1 py-1.5 rounded-lg text-[10px] font-semibold transition-all ${
-                  sidePanel === t.id ? "bg-blue-500 text-white" : "text-muted-foreground hover:text-foreground"
-                }`}>{t.label}</button>
-            ))}
+          {/* Watchlist with live quotes */}
+          <div className="bg-card border border-border rounded-2xl p-4">
+            <h3 className="text-xs font-mono font-semibold text-muted-foreground mb-3">WATCHLIST</h3>
+            {watchlistSymbols.length > 0 ? (
+              <div className="space-y-1.5">
+                {watchlistSymbols.map((sym) => {
+                  const p = prices[sym]; const prev = prevPrices[sym];
+                  const ch = p?.price && prev?.price ? ((p.price - prev.price) / prev.price * 100) : 0;
+                  return (
+                    <div key={sym} className="flex items-center justify-between p-2.5 bg-background rounded-lg">
+                      <span className="font-mono font-bold text-xs">{sym}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-xs">${p?.price?.toFixed(2) || "—"}</span>
+                        {ch !== 0 && <span className={`text-[10px] font-mono font-semibold ${ch > 0 ? "text-emerald-500" : "text-red-500"}`}>{ch > 0 ? "▲" : "▼"}{Math.abs(ch).toFixed(1)}%</span>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : <p className="text-xs text-muted-foreground text-center py-3">Ask the AI to watch stocks</p>}
           </div>
 
-          {sidePanel === "discoveries" && (
-            <DailyPicks prices={prices} news={news} signals={signals} portfolio={portfolioSymbols} watchlist={watchlistSymbols} onWatchlistUpdate={handleDataUpdate} />
-          )}
-
-          {sidePanel === "portfolio" && (
-            <PortfolioWidget key={portfolioKey} prices={prices} signals={signals} />
-          )}
-
-          {sidePanel === "watchlist" && (
-            <div className="bg-card border border-border rounded-2xl p-5">
-              <h3 className="text-xs font-mono font-semibold text-muted-foreground mb-3">WATCHLIST</h3>
-              {watchlistSymbols.length > 0 ? (
-                <div className="space-y-1.5">
-                  {watchlistSymbols.map((sym) => {
-                    const p = prices[sym]; const prev = prevPrices[sym];
-                    const ch = p?.price && prev?.price ? ((p.price - prev.price) / prev.price * 100) : 0;
-                    return (
-                      <div key={sym} className="flex items-center justify-between p-2.5 bg-background rounded-lg">
-                        <span className="font-mono font-bold text-xs">{sym}</span>
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono text-xs">${p?.price?.toFixed(2) || "—"}</span>
-                          {ch !== 0 && <span className={`text-[10px] font-mono font-semibold ${ch > 0 ? "text-emerald-500" : "text-red-500"}`}>{ch > 0 ? "▲" : "▼"}{Math.abs(ch).toFixed(1)}%</span>}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : <p className="text-xs text-muted-foreground text-center py-4">Ask the AI to watch stocks for you</p>}
-            </div>
-          )}
+          {/* Today's Discoveries */}
+          <DailyPicks prices={prices} news={news} signals={signals} portfolio={portfolioSymbols} watchlist={watchlistSymbols} onWatchlistUpdate={handleDataUpdate} />
         </div>
       </div>
 
-      <div className="text-center text-[10px] font-mono text-muted-foreground pt-2">
-        Not financial advice · StockPulse v1.0
-      </div>
+      <div className="text-center text-[10px] font-mono text-muted-foreground pt-2">Not financial advice · StockPulse v1.0</div>
     </div>
   );
 }

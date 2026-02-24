@@ -2,8 +2,8 @@
 export const runtime = "edge";
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
-// Use Sonnet which is confirmed working on your account
-const MODEL = process.env.CHAT_MODEL || "claude-sonnet-4-20250514";
+// Use Haiku 4.5 for speed — 4-5x faster than Sonnet, confirmed model string
+const MODEL = process.env.CHAT_MODEL || "claude-haiku-4-5-20251001";
 
 export async function POST(request) {
   if (!ANTHROPIC_API_KEY) {
