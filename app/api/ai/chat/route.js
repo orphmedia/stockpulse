@@ -61,31 +61,18 @@ export async function POST(request) {
 
     const today = new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
 
-    const systemPrompt = `You are StockPulse AI, a sharp personal trading assistant. Today is ${today}.
-You're talking to ${first} (${userEmail}).
+    const systemPrompt = `You are StockPulse AI, ${first}'s personal trading assistant. Today is ${today}.
 
-THEIR PORTFOLIO: ${portfolioCtx || "Empty"}
-${totalVal > 0 ? `Total: $${totalVal.toFixed(0)} | P/L: ${totalVal - totalCost >= 0 ? "+" : ""}$${(totalVal - totalCost).toFixed(0)} (${totalCost > 0 ? ((totalVal - totalCost) / totalCost * 100).toFixed(1) : 0}%)` : ""}
+PORTFOLIO: ${portfolioCtx || "Empty"}${totalVal > 0 ? ` | Total: $${totalVal.toFixed(0)}, P/L: ${totalVal - totalCost >= 0 ? "+" : ""}$${(totalVal - totalCost).toFixed(0)}` : ""}
 WATCHLIST: ${watchCtx || "Empty"}
-PRICES: ${priceCtx || "None loaded"}
-NEWS: ${newsCtx || "None"}
+PRICES: ${priceCtx || "None"}
 
-RULES:
-- Talk naturally like a knowledgeable friend. This is voice-first — keep it conversational.
-- Use ${first}'s name occasionally.
-- Be direct with opinions. Say BUY, SELL, or HOLD.
-- Keep answers to 2-5 sentences unless they ask for deep analysis.
-- NEVER output HTML, markdown formatting, or citation tags.
+Be conversational and concise — 2-4 sentences max. Give direct BUY/SELL/HOLD opinions. Use ${first}'s name sometimes. No HTML or markdown.
 
-ACTIONS: When the user asks to add/watch/track/buy stocks, include action tags at the END of your response:
-<action type="add_to_watchlist" symbol="NVDA" name="NVIDIA" sector="Technology"/>
-<action type="add_to_portfolio" symbol="AAPL" shares="10" avg_cost="185" name="Apple" sector="Technology"/>
-<action type="remove_from_watchlist" symbol="TSLA"/>
-<action type="remove_from_portfolio" symbol="META"/>
-<action type="show_stock" symbol="NVDA" name="NVIDIA" sector="Technology" price="890" targetPrice="1000" dividend="0.04" confidence="HIGH" catalyst="AI demand surge"/>
-
-ALWAYS include <action type="show_stock"...> when discussing a specific stock so the user sees a data card.
-Only include action tags when actually performing an action or showing a stock. Don't include them for general chat.`;
+When discussing a stock, add at end: <action type="show_stock" symbol="X" name="Name" sector="S" price="0" targetPrice="0" dividend="0" confidence="HIGH" catalyst="reason"/>
+For watchlist: <action type="add_to_watchlist" symbol="X" name="Name" sector="S"/>
+For portfolio: <action type="add_to_portfolio" symbol="X" shares="N" avg_cost="N" name="Name" sector="S"/>
+For removing: <action type="remove_from_watchlist" symbol="X"/> or <action type="remove_from_portfolio" symbol="X"/>`;
 
     // Build messages - ensure alternation
     const apiMessages = [];
@@ -103,18 +90,18 @@ Only include action tags when actually performing an action or showing a stock. 
     }
     apiMessages.push({ role: "user", content: message });
 
-    // Simple chat or search?
-    const isSimple = /^(hi|hello|hey|thanks|thank you|ok|okay|sure|yes|no|cool|got it|what can you do|how are you)/i.test(message.trim());
+    // Only search when user needs CURRENT external data
+    const needsSearch = /\b(news|today|latest|current|recent|right now|this week|price of|how.*(doing|performing)|what.*(happening|going on)|market|earnings|analyst|upgrade|downgrade|ipo|fda|fed |rate cut|rate hike)\b/i.test(message);
 
-    console.log("[AI Chat] msgs:", apiMessages.length, "search:", !isSimple, "msg:", message.slice(0, 50));
+    console.log("[AI Chat] msgs:", apiMessages.length, "search:", needsSearch, "msg:", message.slice(0, 50));
 
     const body = {
       model: "claude-sonnet-4-20250514",
-      max_tokens: 1500,
+      max_tokens: 800,
       system: systemPrompt,
       messages: apiMessages,
     };
-    if (!isSimple) {
+    if (needsSearch) {
       body.tools = [{ type: "web_search_20250305", name: "web_search" }];
     }
 
