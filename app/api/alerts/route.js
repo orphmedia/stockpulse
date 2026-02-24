@@ -105,12 +105,24 @@ export async function POST(request) {
   const { symbol, message, urgency } = await request.json();
 
   try {
-    // Get user's phone and carrier
-    const { data: user } = await supabaseAdmin
+    // Get user's phone — try with carrier, fallback without
+    let user = null;
+    let { data, error } = await supabaseAdmin
       .from("users")
       .select("phone, carrier, alert_webhook")
       .eq("id", session.user.id)
       .single();
+    
+    if (error) {
+      // carrier column might not exist
+      const res2 = await supabaseAdmin
+        .from("users")
+        .select("phone, alert_webhook")
+        .eq("id", session.user.id)
+        .single();
+      data = res2.data;
+    }
+    user = data;
 
     const smsBody = `StockPulse ${urgency === "high" ? "URGENT" : "Alert"}${symbol ? ` $${symbol}` : ""}: ${message}`;
 
