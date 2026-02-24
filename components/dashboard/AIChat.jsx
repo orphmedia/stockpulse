@@ -53,17 +53,52 @@ export default function AIChat({ prices, news, signals, watchlist, portfolio, so
   useEffect(() => { scrollToBottom(); }, [messages]);
   useEffect(() => { if (!voiceMode) inputRef.current?.focus(); }, [voiceMode]);
 
-  // Welcome
+  // Auto-briefing on login
+  const briefingSent = useRef(false);
   useEffect(() => {
     if (welcomeSent.current) return;
     welcomeSent.current = true;
     const h = new Date().getHours();
     const g = h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening";
-    const pc = portfolio?.length || 0;
-    let t = `${g}, ${firstName}! `;
-    t += pc > 0 ? `You've got ${pc} stocks in your portfolio. What do you want to look at?` : `What stocks or crypto are you interested in?`;
-    setMessages([{ role: "assistant", content: t }]);
-  }, [firstName, portfolio]);
+    setMessages([{ role: "assistant", content: `${g}, ${firstName}! Let me pull up your market briefing...` }]);
+  }, [firstName]);
+
+  // Trigger auto-briefing once portfolio/prices are loaded
+  useEffect(() => {
+    if (briefingSent.current || !portfolio || !prices) return;
+    const hasPortfolio = portfolio.length > 0;
+    const hasPrices = Object.keys(prices).length > 0;
+    if (!hasPortfolio && !hasPrices) return;
+    briefingSent.current = true;
+
+    const h = new Date().getHours();
+    const isPremarket = h < 9 || (h === 9 && new Date().getMinutes() < 30);
+    const isAfterHours = h >= 16;
+    const isWeekend = [0, 6].includes(new Date().getDay());
+
+    let briefingPrompt;
+    if (hasPortfolio) {
+      const holdingsList = portfolio.map(p => `${p.symbol} (${p.shares} shares @ $${p.avg_cost?.toFixed(2)})`).join(", ");
+      if (isWeekend) {
+        briefingPrompt = `Give me a weekend portfolio review. My holdings: ${holdingsList}. Summarize how my portfolio did this week and what to watch next week.`;
+      } else if (isPremarket) {
+        briefingPrompt = `Give me my premarket briefing. My holdings: ${holdingsList}. What happened overnight, any premarket movers in my portfolio, and what to watch for today?`;
+      } else if (isAfterHours) {
+        briefingPrompt = `Give me my after-hours recap. My holdings: ${holdingsList}. How did my portfolio do today? Any after-hours news or movers?`;
+      } else {
+        briefingPrompt = `Give me a quick market update. My holdings: ${holdingsList}. How's my portfolio doing right now and anything I should pay attention to?`;
+      }
+    } else {
+      briefingPrompt = isPremarket
+        ? "Give me a premarket briefing. What are the top market movers and themes to watch today?"
+        : isAfterHours
+        ? "Give me an after-hours market recap. How did the market do today?"
+        : "Give me a quick market update. What's moving right now?";
+    }
+
+    // Small delay to let streaming UI settle
+    setTimeout(() => submitMessage(briefingPrompt, true), 800);
+  }, [portfolio, prices]);
 
   // Voice settings + preload voices
   const voicesRef = useRef([]);
@@ -195,11 +230,13 @@ export default function AIChat({ prices, news, signals, watchlist, portfolio, so
   };
 
   // ═══ SUBMIT WITH STREAMING ═══
-  const submitMessage = async (msg) => {
+  const submitMessage = async (msg, isBriefing = false) => {
     const userMsg = msg || input.trim();
     if (!userMsg || loading) return;
     setInput("");
-    setMessages((prev) => [...prev, { role: "user", content: userMsg }]);
+    if (!isBriefing) {
+      setMessages((prev) => [...prev, { role: "user", content: userMsg }]);
+    }
     setLoading(true);
 
     const history = messages.slice(1).filter((m) => (m.role === "user" || m.role === "assistant") && !m.isError).slice(-20).map((m) => ({ role: m.role, content: m.content }));

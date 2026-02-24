@@ -18,7 +18,9 @@ export async function POST(request) {
   const hl = (portfolio || []).slice(0, 10).map((h) => `${h.symbol}(${h.shares}@${h.avg_cost?.toFixed(0)})`).join(" ");
   const wl = (watchlist || []).slice(0, 10).map((w) => w.symbol).join(",");
 
-  const system = `${first}'s stock AI. 1-3 sentences. Direct BUY/SELL/HOLD. No markdown.
+  const system = `${first}'s stock AI. Direct, actionable. No markdown/bullets. 
+For briefings: cover portfolio P/L, notable movers, key news, and 1-2 things to watch. 3-5 sentences.
+For questions: 1-3 sentences. Direct BUY/SELL/HOLD.
 Portfolio: ${hl || "empty"} | Watch: ${wl || "empty"} | Prices: ${pl || "n/a"}
 Actions — append at END of response when user asks:
 <action type="show_stock" symbol="X" name="N" price="0" targetPrice="0" confidence="HIGH" catalyst="why"/>
@@ -52,7 +54,7 @@ When user says remove/delete from watchlist, use remove_from_watchlist. When the
       },
       body: JSON.stringify({
         model: MODEL,
-        max_tokens: 300,
+        max_tokens: 500,
         system,
         messages: msgs,
         stream: true,
