@@ -177,7 +177,9 @@ export default function AIChat({ prices, news, signals, watchlist, portfolio, so
       });
 
       if (!res.ok) {
-        setMessages((prev) => [...prev, { role: "assistant", content: `Error ${res.status}. Check API credits.`, isError: true }]);
+        let errMsg = `Error ${res.status}`;
+        try { const e = await res.json(); errMsg = e.error || errMsg; } catch {}
+        setMessages((prev) => [...prev, { role: "assistant", content: errMsg, isError: true }]);
         setLoading(false);
         if (voiceModeRef.current) setTimeout(startListening, 800);
         return;

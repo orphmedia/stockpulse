@@ -1,9 +1,9 @@
-// Edge runtime = no cold starts, deployed at CDN edge
+// Edge runtime = no cold starts
 export const runtime = "edge";
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
-// claude-3-5-haiku is the fastest model available
-const MODEL = process.env.CHAT_MODEL || "claude-3-5-haiku-20241022";
+// Use Sonnet which is confirmed working on your account
+const MODEL = process.env.CHAT_MODEL || "claude-sonnet-4-20250514";
 
 export async function POST(request) {
   if (!ANTHROPIC_API_KEY) {
@@ -21,14 +21,13 @@ export async function POST(request) {
   const system = `${first}'s stock AI. 1-3 sentences. Direct BUY/SELL/HOLD. No markdown.
 Portfolio: ${hl || "empty"} | Watch: ${wl || "empty"} | Prices: ${pl || "n/a"}
 Stock card: <action type="show_stock" symbol="X" name="N" price="0" targetPrice="0" confidence="HIGH" catalyst="why"/>
-Watchlist: <action type="add_to_watchlist" symbol="X" name="N"/>
-Portfolio: <action type="add_to_portfolio" symbol="X" shares="N" avg_cost="N" name="N"/>`;
+Watchlist: <action type="add_to_watchlist" symbol="X" name="N"/>`;
 
-  // Messages — strict alternation, minimal
+  // Messages — strict alternation
   const msgs = [];
   if (history?.length) {
     let last = null;
-    for (const m of history.slice(-10)) { // only last 10
+    for (const m of history.slice(-10)) {
       if (m.role === last) continue;
       msgs.push({ role: m.role, content: m.content });
       last = m.role;
@@ -38,8 +37,6 @@ Portfolio: <action type="add_to_portfolio" symbol="X" shares="N" avg_cost="N" na
   msgs.push({ role: "user", content: message });
 
   try {
-    const t0 = Date.now();
-
     const res = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
@@ -56,23 +53,20 @@ Portfolio: <action type="add_to_portfolio" symbol="X" shares="N" avg_cost="N" na
       }),
     });
 
-    console.log(`[Chat] ${MODEL} call took ${Date.now() - t0}ms, status: ${res.status}`);
-
     if (!res.ok) {
-      const err = await res.text();
-      console.error("[Chat] Error:", err.slice(0, 200));
-      return new Response(JSON.stringify({ error: `API ${res.status}` }), { status: 502 });
+      const errBody = await res.text();
+      console.error("[Chat] API", res.status, errBody.slice(0, 300));
+      // Pass through the actual error so client can see it
+      return new Response(JSON.stringify({ error: errBody.slice(0, 200) }), { 
+        status: res.status,
+        headers: { "Content-Type": "application/json" },
+      });
     }
 
-    // Stream directly to client — zero buffering
     return new Response(res.body, {
-      headers: {
-        "Content-Type": "text/event-stream",
-        "Cache-Control": "no-cache",
-      },
+      headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-cache" },
     });
   } catch (e) {
-    console.error("[Chat]", e.message);
     return new Response(JSON.stringify({ error: e.message }), { status: 500 });
   }
 }
