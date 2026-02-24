@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/supabase";
+import { cleanPhone } from "@/lib/phone";
 
 const TWILIO_SID = process.env.TWILIO_ACCOUNT_SID;
 const TWILIO_AUTH = process.env.TWILIO_AUTH_TOKEN;
@@ -26,8 +27,8 @@ async function sendTwilioSMS(to, body) {
     return { sent: false, reason: "Twilio not configured" };
   }
 
-  let phone = to.replace(/[\s()-]/g, "");
-  if (!phone.startsWith("+")) phone = "+1" + phone.replace(/^\+?1?/, "");
+  const phone = cleanPhone(to);
+  if (!phone) return { sent: false, reason: `Invalid phone number: ${to}` };
 
   try {
     const res = await fetch(

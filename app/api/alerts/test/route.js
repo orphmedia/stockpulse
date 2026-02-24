@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/supabase";
+import { cleanPhone } from "@/lib/phone";
 
 const TWILIO_SID = process.env.TWILIO_ACCOUNT_SID;
 const TWILIO_AUTH = process.env.TWILIO_AUTH_TOKEN;
@@ -29,18 +30,17 @@ export async function GET() {
       .eq("id", session.user.id)
       .single();
 
-    diagnostics.dbPhone = user?.phone || "NOT SET";
+    diagnostics.dbPhoneRaw = user?.phone || "NOT SET";
+    diagnostics.dbPhone = cleanPhone(user?.phone) || "INVALID";
     diagnostics.dbCarrier = user?.carrier || "NOT SET";
     diagnostics.dbError = error?.message || null;
   } catch (e) {
     diagnostics.dbError = e.message;
   }
 
-  // Try sending a test SMS if everything is configured
-  if (diagnostics.twilioConfigured && diagnostics.dbPhone && diagnostics.dbPhone !== "NOT SET") {
-    let phone = diagnostics.dbPhone.replace(/[\s()-]/g, "");
-    if (!phone.startsWith("+")) phone = "+1" + phone.replace(/^\+?1?/, "");
-
+  // Try sending a test SMS
+  const phone = diagnostics.dbPhone;
+  if (diagnostics.twilioConfigured && phone && phone !== "INVALID") {
     try {
       const res = await fetch(
         `https://api.twilio.com/2010-04-01/Accounts/${TWILIO_SID}/Messages.json`,
@@ -70,7 +70,7 @@ export async function GET() {
     diagnostics.smsResult = "SKIPPED";
     diagnostics.smsSkipReason = !diagnostics.twilioConfigured 
       ? "Twilio not configured" 
-      : "No phone in database";
+      : `Phone invalid: raw="${diagnostics.dbPhoneRaw}" cleaned="${phone}"`;
   }
 
   return NextResponse.json(diagnostics);
