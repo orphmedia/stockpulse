@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback, use } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, useCallback } from "react";
+import { useRouter, useParams } from "next/navigation";
 
 const TIMEFRAMES = [
   { label: "1D", value: "1d", tf: "5Min", limit: 78 },
@@ -33,7 +33,7 @@ function MiniChart({ bars, height = 200 }) {
   const maxVol = Math.max(...volumes) || 1;
 
   return (
-    <svg viewBox={`0 0 ${w} ${h + 40}`} className="w-full" preserveAspectRatio="none">
+    <svg viewBox={`0 0 ${w} ${h + 40}`} className="w-full" style={{ height: `${height + 40}px` }}>
       {/* Price area */}
       <defs>
         <linearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
@@ -54,8 +54,9 @@ function MiniChart({ bars, height = 200 }) {
   );
 }
 
-export default function StockDetailPage({ params }) {
-  const { symbol } = use(params);
+export default function StockDetailPage() {
+  const params = useParams();
+  const symbol = params?.symbol;
   const router = useRouter();
   const sym = symbol?.toUpperCase();
 
