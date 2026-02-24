@@ -173,6 +173,8 @@ export default function AIChat({ prices, news, signals, watchlist, portfolio, so
       } else if (a.type === "remove_from_portfolio") {
         await fetch("/api/portfolio", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ symbol: a.symbol }) });
         if (onPortfolioUpdate) onPortfolioUpdate();
+      } else if (a.type === "send_alert") {
+        await fetch("/api/alerts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ symbol: a.symbol, message: a.message || `Alert for ${a.symbol}`, urgency: a.urgency || "normal" }) });
       }
     }
     if (actions.some((a) => a.type.includes("watchlist") || a.type === "monitor") && onWatchlistUpdate) onWatchlistUpdate();

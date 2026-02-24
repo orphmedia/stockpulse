@@ -20,8 +20,14 @@ export async function POST(request) {
 
   const system = `${first}'s stock AI. 1-3 sentences. Direct BUY/SELL/HOLD. No markdown.
 Portfolio: ${hl || "empty"} | Watch: ${wl || "empty"} | Prices: ${pl || "n/a"}
-Stock card: <action type="show_stock" symbol="X" name="N" price="0" targetPrice="0" confidence="HIGH" catalyst="why"/>
-Watchlist: <action type="add_to_watchlist" symbol="X" name="N"/>`;
+Actions — append at END of response when user asks:
+<action type="show_stock" symbol="X" name="N" price="0" targetPrice="0" confidence="HIGH" catalyst="why"/>
+<action type="add_to_watchlist" symbol="X" name="N" sector="S"/>
+<action type="remove_from_watchlist" symbol="X"/>
+<action type="add_to_portfolio" symbol="X" shares="0" avg_cost="0" name="N"/>
+<action type="remove_from_portfolio" symbol="X"/>
+<action type="send_alert" symbol="X" message="Price hit target" urgency="high"/>
+When user says remove/delete from watchlist, use remove_from_watchlist. When they say alert/notify me, use send_alert.`;
 
   // Messages — strict alternation
   const msgs = [];
