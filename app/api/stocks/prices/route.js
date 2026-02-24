@@ -26,7 +26,8 @@ export async function GET(request) {
       }
 
       console.log(`[Prices API] Returning ${Object.keys(quotes).length} quotes`);
-      return NextResponse.json({ quotes });
+      // Return as both 'prices' and 'quotes' for compatibility
+      return NextResponse.json({ prices: quotes, quotes, signals: {} });
     }
 
     if (type === "historical") {

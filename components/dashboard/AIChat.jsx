@@ -86,7 +86,9 @@ export default function AIChat({ prices, news, signals, watchlist, portfolio, so
 
     // Try ElevenLabs first (better quality voice)
     try {
+      console.log("[Voice] Calling ElevenLabs...");
       const r = await fetch("/api/ai/speak", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: clean }) });
+      console.log("[Voice] ElevenLabs response:", r.status, r.headers.get("content-type"));
       if (r.ok && r.headers.get("content-type")?.includes("audio")) {
         const blob = await r.blob(); const url = URL.createObjectURL(blob);
         const a = new Audio(url); audioRef.current = a; a.playbackRate = 1.15;
@@ -226,6 +228,7 @@ export default function AIChat({ prices, news, signals, watchlist, portfolio, so
       });
 
       if (actions.length) await execActions(actions);
+      console.log("[StockPulse] Speaking:", clean.slice(0, 60), "voiceEnabled:", voiceEnabled);
       speak(clean);
 
     } catch (e) {

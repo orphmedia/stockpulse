@@ -27,6 +27,7 @@ export default function DashboardPage() {
   const [lastUpdate, setLastUpdate] = useState(null);
   const [isLive, setIsLive] = useState(true);
   const [portfolioKey, setPortfolioKey] = useState(0);
+  const [sidePanel, setSidePanel] = useState("picks");
   const intervalRef = useRef(null);
 
   const allSymbols = [...new Set([...portfolioSymbols, ...watchlistSymbols, ...MARKET_INDICES.map((i) => i.symbol)])];
@@ -99,35 +100,52 @@ export default function DashboardPage() {
           <AIChat prices={prices} news={news} signals={signals} watchlist={watchlistData} portfolio={portfolioHoldings} socialData={socialData} onWatchlistUpdate={handleDataUpdate} onPortfolioUpdate={handleDataUpdate} />
         </div>
 
-        {/* Right 1/3: Always visible - Portfolio, Watchlist, Discoveries */}
+        {/* Right 1/3: Tabbed - Picks / Portfolio / Watchlist */}
         <div className="space-y-4 overflow-y-auto" style={{ maxHeight: "85vh" }}>
-          {/* Portfolio */}
-          <PortfolioWidget key={portfolioKey} prices={prices} signals={signals} />
-
-          {/* Watchlist with live quotes */}
-          <div className="bg-card border border-border rounded-2xl p-4">
-            <h3 className="text-xs font-mono font-semibold text-muted-foreground mb-3">WATCHLIST</h3>
-            {watchlistSymbols.length > 0 ? (
-              <div className="space-y-1.5">
-                {watchlistSymbols.map((sym) => {
-                  const p = prices[sym]; const prev = prevPrices[sym];
-                  const ch = p?.price && prev?.price ? ((p.price - prev.price) / prev.price * 100) : 0;
-                  return (
-                    <div key={sym} className="flex items-center justify-between p-2.5 bg-background rounded-lg">
-                      <span className="font-mono font-bold text-xs">{sym}</span>
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-xs">${p?.price?.toFixed(2) || "—"}</span>
-                        {ch !== 0 && <span className={`text-[10px] font-mono font-semibold ${ch > 0 ? "text-emerald-500" : "text-red-500"}`}>{ch > 0 ? "▲" : "▼"}{Math.abs(ch).toFixed(1)}%</span>}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : <p className="text-xs text-muted-foreground text-center py-3">Ask the AI to watch stocks</p>}
+          {/* Tabs */}
+          <div className="flex gap-1 bg-card border border-border rounded-xl p-1">
+            {[
+              { id: "picks", label: "⭐ Discoveries" },
+              { id: "portfolio", label: "💼 Portfolio" },
+              { id: "watchlist", label: "👁 Watchlist" },
+            ].map((t) => (
+              <button key={t.id} onClick={() => setSidePanel(t.id)}
+                className={`flex-1 py-1.5 rounded-lg text-[10px] font-semibold transition-all ${
+                  sidePanel === t.id ? "bg-blue-500 text-white" : "text-muted-foreground hover:text-foreground"
+                }`}>{t.label}</button>
+            ))}
           </div>
 
-          {/* Today's Discoveries */}
-          <DailyPicks prices={prices} news={news} signals={signals} portfolio={portfolioSymbols} watchlist={watchlistSymbols} onWatchlistUpdate={handleDataUpdate} />
+          {sidePanel === "picks" && (
+            <DailyPicks prices={prices} news={news} signals={signals} portfolio={portfolioSymbols} watchlist={watchlistSymbols} onWatchlistUpdate={handleDataUpdate} />
+          )}
+
+          {sidePanel === "portfolio" && (
+            <PortfolioWidget key={portfolioKey} prices={prices} signals={signals} />
+          )}
+
+          {sidePanel === "watchlist" && (
+            <div className="bg-card border border-border rounded-2xl p-4">
+              <h3 className="text-xs font-mono font-semibold text-muted-foreground mb-3">WATCHLIST</h3>
+              {watchlistSymbols.length > 0 ? (
+                <div className="space-y-1.5">
+                  {watchlistSymbols.map((sym) => {
+                    const p = prices[sym]; const prev = prevPrices[sym];
+                    const ch = p?.price && prev?.price ? ((p.price - prev.price) / prev.price * 100) : 0;
+                    return (
+                      <div key={sym} className="flex items-center justify-between p-2.5 bg-background rounded-lg">
+                        <span className="font-mono font-bold text-xs">{sym}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-xs">${p?.price?.toFixed(2) || "—"}</span>
+                          {ch !== 0 && <span className={`text-[10px] font-mono font-semibold ${ch > 0 ? "text-emerald-500" : "text-red-500"}`}>{ch > 0 ? "▲" : "▼"}{Math.abs(ch).toFixed(1)}%</span>}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : <p className="text-xs text-muted-foreground text-center py-3">Ask the AI to watch stocks for you</p>}
+            </div>
+          )}
         </div>
       </div>
 
