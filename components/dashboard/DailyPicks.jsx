@@ -13,6 +13,9 @@ export default function DailyPicks({ prices, news, signals, portfolio, watchlist
   const [loading, setLoading] = useState(false);
   const [lastGenerated, setLastGenerated] = useState(null);
   const [adding, setAdding] = useState({});
+  const [selectedPick, setSelectedPick] = useState(null);
+  const [drilldownLoading, setDrilldownLoading] = useState(false);
+  const [drilldownData, setDrilldownData] = useState(null);
 
   const generatePicks = useCallback(async () => {
     if (loading) return;
@@ -27,50 +30,153 @@ export default function DailyPicks({ prices, news, signals, portfolio, watchlist
         const data = await res.json();
         setPicks(data);
         setLastGenerated(new Date());
-        // Cache in sessionStorage
         sessionStorage.setItem("stockpulse_picks", JSON.stringify({ data, time: Date.now() }));
       }
-    } catch (e) {
-      console.error("Picks error:", e);
-    }
+    } catch (e) { console.error("Picks error:", e); }
     setLoading(false);
   }, [news, signals, prices, portfolio, watchlist, loading]);
 
-  // Load cached picks or auto-generate
   useEffect(() => {
     try {
       const cached = JSON.parse(sessionStorage.getItem("stockpulse_picks") || "null");
-      if (cached && Date.now() - cached.time < 3600000) { // 1 hour cache
+      if (cached && Date.now() - cached.time < 3600000) {
         setPicks(cached.data);
         setLastGenerated(new Date(cached.time));
         return;
       }
     } catch {}
-    // Auto-generate if we have data
     if (Object.keys(prices || {}).length > 0 && (news || []).length > 0 && !picks && !loading) {
       generatePicks();
     }
   }, [prices, news]);
 
-  const addToWatchlist = async (pick) => {
+  // ═══ DRILLDOWN — fetch detailed analysis for a pick ═══
+  const openDrilldown = async (pick) => {
+    setSelectedPick(pick);
+    setDrilldownData(null);
+    setDrilldownLoading(true);
+
+    try {
+      const res = await fetch("/api/ai/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: `Give me a detailed analysis of ${pick.symbol} (${pick.name}). Include: 1) Current price and today's movement, 2) Latest news and catalysts, 3) Dividend yield and history if any, 4) Clear BUY / HOLD / SELL recommendation with reasoning, 5) Key risks. Be specific with numbers. Respond in plain text, not JSON.`,
+          history: [],
+          prices, news: (news || []).slice(0, 10),
+          signals, watchlist: [], portfolio: [],
+          socialData: null,
+        }),
+      });
+      const data = await res.json();
+      setDrilldownData(data.response || "Unable to load analysis.");
+    } catch {
+      setDrilldownData("Failed to load analysis. Try again.");
+    }
+    setDrilldownLoading(false);
+  };
+
+  const addToWatchlist = async (pick, e) => {
+    e?.stopPropagation();
     setAdding((prev) => ({ ...prev, [pick.symbol]: true }));
     try {
       await fetch("/api/watchlist", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          symbol: pick.symbol,
-          name: pick.name || pick.symbol,
-          sector: "AI Pick",
-        }),
+        body: JSON.stringify({ symbol: pick.symbol, name: pick.name || pick.symbol, sector: pick.sector || "AI Pick" }),
       });
       if (onWatchlistUpdate) onWatchlistUpdate();
-    } catch (e) {
-      console.error("Add error:", e);
-    }
+    } catch {}
     setTimeout(() => setAdding((prev) => ({ ...prev, [pick.symbol]: false })), 2000);
   };
 
+  // ═══ DRILLDOWN VIEW ═══
+  if (selectedPick) {
+    const conf = CONFIDENCE_STYLES[selectedPick.confidence] || CONFIDENCE_STYLES.MEDIUM;
+    return (
+      <div className="bg-card border border-border rounded-2xl p-5">
+        {/* Back button */}
+        <button onClick={() => { setSelectedPick(null); setDrilldownData(null); }}
+          className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground mb-4 transition-colors">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <polyline points="15 18 9 12 15 6" />
+          </svg>
+          Back to Discoveries
+        </button>
+
+        {/* Stock header */}
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="font-mono font-bold text-xl">{selectedPick.symbol}</span>
+              <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded ${conf.bg} ${conf.text}`}>
+                {selectedPick.action} · {selectedPick.confidence}
+              </span>
+            </div>
+            <p className="text-sm text-muted-foreground mt-0.5">{selectedPick.name}</p>
+          </div>
+          <button onClick={(e) => addToWatchlist(selectedPick, e)}
+            disabled={adding[selectedPick.symbol]}
+            className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition-all ${
+              adding[selectedPick.symbol]
+                ? "bg-emerald-500/20 text-emerald-500"
+                : "bg-primary text-primary-foreground hover:opacity-90"
+            }`}>
+            {adding[selectedPick.symbol] ? "✓ Added" : "+ Add to Watchlist"}
+          </button>
+        </div>
+
+        {/* Key metrics */}
+        <div className="grid grid-cols-4 gap-3 mb-4">
+          <div className="bg-background rounded-lg p-3 text-center">
+            <div className="text-[10px] text-muted-foreground mb-1">PRICE</div>
+            <div className="font-mono font-bold text-sm">
+              {selectedPick.current_price ? `$${Number(selectedPick.current_price).toFixed(2)}` : "—"}
+            </div>
+          </div>
+          <div className="bg-background rounded-lg p-3 text-center">
+            <div className="text-[10px] text-muted-foreground mb-1">TARGET</div>
+            <div className="font-mono font-bold text-sm text-emerald-500">
+              {selectedPick.target_price ? `$${Number(selectedPick.target_price).toFixed(2)}` : "—"}
+            </div>
+          </div>
+          <div className="bg-background rounded-lg p-3 text-center">
+            <div className="text-[10px] text-muted-foreground mb-1">UPSIDE</div>
+            <div className="font-mono font-bold text-sm text-emerald-500">
+              {selectedPick.upside_pct > 0 ? `+${Number(selectedPick.upside_pct).toFixed(1)}%` : "—"}
+            </div>
+          </div>
+          <div className="bg-background rounded-lg p-3 text-center">
+            <div className="text-[10px] text-muted-foreground mb-1">DIVIDEND</div>
+            <div className="font-mono font-bold text-sm text-blue-400">
+              {selectedPick.dividend_yield > 0 ? `${Number(selectedPick.dividend_yield).toFixed(1)}%` : "None"}
+            </div>
+          </div>
+        </div>
+
+        {/* Catalyst */}
+        <div className="bg-background rounded-lg p-3 mb-4">
+          <div className="text-[10px] text-muted-foreground mb-1">WHY NOW</div>
+          <p className="text-xs leading-relaxed">{selectedPick.catalyst}</p>
+        </div>
+
+        {/* AI Deep Analysis */}
+        <div className="bg-background rounded-lg p-4">
+          <div className="text-[10px] text-muted-foreground mb-2">AI ANALYSIS</div>
+          {drilldownLoading ? (
+            <div className="flex items-center gap-2 py-4">
+              <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+              <span className="text-xs text-muted-foreground">Analyzing {selectedPick.symbol}...</span>
+            </div>
+          ) : drilldownData ? (
+            <p className="text-xs leading-relaxed whitespace-pre-wrap">{drilldownData}</p>
+          ) : null}
+        </div>
+      </div>
+    );
+  }
+
+  // ═══ PICKS LIST VIEW ═══
   return (
     <div className="bg-card border border-border rounded-2xl p-5">
       <div className="flex items-center justify-between mb-4">
@@ -89,34 +195,21 @@ export default function DailyPicks({ prices, news, signals, portfolio, watchlist
             )}
           </div>
         </div>
-        <button
-          onClick={generatePicks}
-          disabled={loading}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-primary/10 text-primary border border-primary/20 rounded-lg text-[10px] font-semibold hover:bg-primary/20 transition-all disabled:opacity-50"
-        >
-          {loading ? (
-            <div className="w-3 h-3 border border-primary border-t-transparent rounded-full animate-spin" />
-          ) : (
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <polyline points="23 4 23 10 17 10" />
-              <path d="M3.51 9a9 9 0 0114.85-3.36L23 10" />
-            </svg>
-          )}
+        <button onClick={generatePicks} disabled={loading}
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-primary/10 text-primary border border-primary/20 rounded-lg text-[10px] font-semibold hover:bg-primary/20 transition-all disabled:opacity-50">
+          {loading ? <div className="w-3 h-3 border border-primary border-t-transparent rounded-full animate-spin" /> :
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="23 4 23 10 17 10" /><path d="M3.51 9a9 9 0 0114.85-3.36L23 10" /></svg>}
           {loading ? "Analyzing..." : "Refresh"}
         </button>
       </div>
 
-      {/* Market Outlook */}
       {picks?.market_outlook && (
         <div className="px-3 py-2 bg-background rounded-lg mb-3">
           <p className="text-xs text-muted-foreground">{picks.market_outlook}</p>
-          {picks.theme && (
-            <p className="text-[10px] text-primary font-medium mt-1">Theme: {picks.theme}</p>
-          )}
+          {picks.theme && <p className="text-[10px] text-primary font-medium mt-1">Theme: {picks.theme}</p>}
         </div>
       )}
 
-      {/* Loading State */}
       {loading && !picks && (
         <div className="flex flex-col items-center justify-center py-8">
           <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mb-3" />
@@ -124,14 +217,15 @@ export default function DailyPicks({ prices, news, signals, portfolio, watchlist
         </div>
       )}
 
-      {/* Picks */}
       {picks?.picks && (
         <div className="space-y-2">
           {picks.picks.map((pick) => {
             const conf = CONFIDENCE_STYLES[pick.confidence] || CONFIDENCE_STYLES.MEDIUM;
             const isAdding = adding[pick.symbol];
             return (
-              <div key={pick.symbol} className={`p-3 rounded-xl border ${conf.border} ${conf.bg}`}>
+              <div key={pick.symbol}
+                onClick={() => openDrilldown(pick)}
+                className={`p-3 rounded-xl border ${conf.border} ${conf.bg} cursor-pointer hover:brightness-110 transition-all`}>
                 <div className="flex items-center justify-between mb-1.5">
                   <div className="flex items-center gap-2">
                     <span className="font-mono font-bold text-sm">{pick.symbol}</span>
@@ -139,69 +233,50 @@ export default function DailyPicks({ prices, news, signals, portfolio, watchlist
                       {pick.action} · {pick.confidence}
                     </span>
                   </div>
-                  <button
-                    onClick={() => addToWatchlist(pick)}
-                    disabled={isAdding}
-                    className={`text-[10px] font-semibold px-2 py-1 rounded-lg transition-all ${
-                      isAdding
-                        ? "bg-emerald-500/20 text-emerald-500"
-                        : "bg-accent hover:bg-accent/80 text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    {isAdding ? "✓ Added" : "+ Watch"}
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button onClick={(e) => addToWatchlist(pick, e)} disabled={isAdding}
+                      className={`text-[10px] font-semibold px-2 py-1 rounded-lg transition-all ${
+                        isAdding ? "bg-emerald-500/20 text-emerald-500" : "bg-accent hover:bg-accent/80 text-muted-foreground hover:text-foreground"
+                      }`}>{isAdding ? "✓" : "+"}</button>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-muted-foreground">
+                      <polyline points="9 18 15 12 9 6" />
+                    </svg>
+                  </div>
                 </div>
                 <p className="text-[11px] text-foreground/80 mb-1.5">{pick.name}</p>
 
-                {/* Price, Target, Dividend row */}
-                <div className="flex items-center gap-3 mb-1.5 flex-wrap">
-                  {pick.current_price && (
-                    <span className="font-mono font-semibold text-xs">${Number(pick.current_price).toFixed(2)}</span>
-                  )}
-                  {pick.target_price && (
-                    <span className="text-[10px] font-mono text-muted-foreground">
-                      → <span className="text-emerald-500 font-semibold">${Number(pick.target_price).toFixed(2)}</span>
-                    </span>
+                {/* Price row */}
+                <div className="flex items-center gap-3 mb-1 flex-wrap">
+                  {pick.current_price > 0 && <span className="font-mono font-semibold text-xs">${Number(pick.current_price).toFixed(2)}</span>}
+                  {pick.target_price > 0 && (
+                    <span className="text-[10px] font-mono text-muted-foreground">→ <span className="text-emerald-500 font-semibold">${Number(pick.target_price).toFixed(2)}</span></span>
                   )}
                   {pick.upside_pct > 0 && (
-                    <span className="text-[9px] font-mono font-bold text-emerald-500 bg-emerald-500/10 px-1.5 py-0.5 rounded">
-                      ▲ {Number(pick.upside_pct).toFixed(1)}%
-                    </span>
+                    <span className="text-[9px] font-mono font-bold text-emerald-500 bg-emerald-500/10 px-1.5 py-0.5 rounded">▲ {Number(pick.upside_pct).toFixed(1)}%</span>
                   )}
                   {pick.dividend_yield > 0 && (
-                    <span className="text-[9px] font-mono text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded">
-                      DIV {Number(pick.dividend_yield).toFixed(1)}%
-                    </span>
+                    <span className="text-[9px] font-mono text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded">DIV {Number(pick.dividend_yield).toFixed(1)}%</span>
                   )}
                 </div>
 
-                {pick.sector && (
-                  <span className="text-[9px] font-mono text-muted-foreground bg-background px-1.5 py-0.5 rounded inline-block mb-1">{pick.sector}</span>
-                )}
-                <p className="text-[11px] text-muted-foreground">{pick.reason}</p>
-                {pick.catalyst && (
-                  <p className="text-[10px] text-muted-foreground/70 mt-1 italic">Catalyst: {pick.catalyst}</p>
-                )}
+                {pick.sector && <span className="text-[9px] font-mono text-muted-foreground bg-background px-1.5 py-0.5 rounded inline-block mb-1">{pick.sector}</span>}
+                <p className="text-[10px] text-muted-foreground">{pick.reason}</p>
               </div>
             );
           })}
         </div>
       )}
 
-      {/* Avoid */}
       {picks?.avoid?.length > 0 && (
         <div className="mt-3 p-3 bg-red-500/5 border border-red-500/10 rounded-xl">
           <div className="flex items-center gap-2 mb-1">
             <span className="text-[10px] font-mono font-bold text-red-500">AVOID</span>
             <span className="font-mono font-bold text-xs">{picks.avoid.join(", ")}</span>
           </div>
-          {picks.avoid_reason && (
-            <p className="text-[10px] text-muted-foreground">{picks.avoid_reason}</p>
-          )}
+          {picks.avoid_reason && <p className="text-[10px] text-muted-foreground">{picks.avoid_reason}</p>}
         </div>
       )}
 
-      {/* Empty State */}
       {!picks && !loading && (
         <div className="text-center py-6">
           <p className="text-xs text-muted-foreground">Click Refresh to generate today&apos;s AI picks</p>
