@@ -66,24 +66,9 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-4 p-4 sm:p-6 max-w-7xl mx-auto">
-      {/* Header with indices */}
+      {/* Header */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <h1 className="text-lg font-bold">StockPulse</h1>
-          <div className="hidden sm:flex gap-3">
-            {MARKET_INDICES.map((idx) => {
-              const p = prices[idx.symbol];
-              const ch = p?.changePct || 0;
-              return (
-                <div key={idx.symbol} className="flex items-center gap-1.5 text-[11px] font-mono">
-                  <span className="text-muted-foreground">{idx.name}</span>
-                  <span className="font-semibold">${p?.price?.toFixed(0) || "—"}</span>
-                  {ch !== 0 && <span className={ch > 0 ? "text-emerald-500" : "text-red-500"}>{ch > 0 ? "▲" : "▼"}{Math.abs(ch).toFixed(2)}%</span>}
-                </div>
-              );
-            })}
-          </div>
-        </div>
+        <h1 className="text-lg font-bold">StockPulse</h1>
         <div className="flex items-center gap-2">
           <button onClick={() => setIsLive(!isLive)} className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-mono ${isLive ? "text-emerald-500" : "text-muted-foreground"}`}>
             <span className={`w-1.5 h-1.5 rounded-full ${isLive ? "bg-emerald-500 animate-pulse" : "bg-muted-foreground"}`} />
@@ -91,6 +76,42 @@ export default function DashboardPage() {
           </button>
           {lastUpdate && <span className="text-[10px] font-mono text-muted-foreground hidden sm:block">{lastUpdate.toLocaleTimeString()}</span>}
         </div>
+      </div>
+
+      {/* Market indices with full data */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        {MARKET_INDICES.map((idx) => {
+          const p = prices[idx.symbol];
+          const ch = p?.changePct || 0;
+          const vol = p?.volume || 0;
+          const fmtVol = vol >= 1e9 ? `${(vol / 1e9).toFixed(2)}B` : vol >= 1e6 ? `${(vol / 1e6).toFixed(1)}M` : vol >= 1e3 ? `${(vol / 1e3).toFixed(0)}K` : `${vol}`;
+          return (
+            <div key={idx.symbol} className="bg-card border border-border rounded-xl p-3">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[10px] font-mono text-muted-foreground">{idx.name}</span>
+                {ch !== 0 && (
+                  <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded ${ch > 0 ? "bg-emerald-500/10 text-emerald-500" : "bg-red-500/10 text-red-500"}`}>
+                    {ch > 0 ? "▲" : "▼"} {Math.abs(ch).toFixed(2)}%
+                  </span>
+                )}
+              </div>
+              <div className="flex items-baseline gap-2">
+                <span className="font-mono font-bold text-lg">${p?.price?.toFixed(2) || "—"}</span>
+                {p?.change != null && (
+                  <span className={`text-xs font-mono ${p.change >= 0 ? "text-emerald-500" : "text-red-500"}`}>
+                    {p.change >= 0 ? "+" : ""}{p.change.toFixed(2)}
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-3 mt-1.5 text-[9px] font-mono text-muted-foreground">
+                {vol > 0 && <span>Vol: {fmtVol}</span>}
+                {p?.high > 0 && <span>H: ${p.high.toFixed(2)}</span>}
+                {p?.low > 0 && <span>L: ${p.low.toFixed(2)}</span>}
+                {p?.open > 0 && <span>O: ${p.open.toFixed(2)}</span>}
+              </div>
+            </div>
+          );
+        })}
       </div>
 
       {/* Main Layout: Chat (2/3) + Right Column (1/3) */}

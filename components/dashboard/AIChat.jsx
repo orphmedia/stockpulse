@@ -117,37 +117,57 @@ export default function AIChat({ prices, news, signals, watchlist, portfolio, so
     if (!clean) { if (voiceModeRef.current) startListening(); return; }
     stopSpeaking();
 
-    // Try ElevenLabs first (better quality voice)
+    // Try ElevenLabs first
     try {
-      console.log("[Voice] Calling ElevenLabs...");
-      const r = await fetch("/api/ai/speak", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: clean }) });
-      console.log("[Voice] ElevenLabs response:", r.status, r.headers.get("content-type"));
-      if (r.ok && r.headers.get("content-type")?.includes("audio")) {
-        const blob = await r.blob(); const url = URL.createObjectURL(blob);
-        const a = new Audio(url); audioRef.current = a; a.playbackRate = 1.15;
-        a.onplay = () => setIsSpeaking(true);
-        a.onended = () => { setIsSpeaking(false); URL.revokeObjectURL(url); audioRef.current = null; if (voiceModeRef.current) setTimeout(startListening, 300); };
-        a.onerror = () => { setIsSpeaking(false); URL.revokeObjectURL(url); audioRef.current = null; if (voiceModeRef.current) startListening(); };
-        await a.play(); return;
-      }
-    } catch (e) { console.log("[Voice] ElevenLabs failed, using browser TTS:", e.message); }
+      console.log("[Voice] Calling ElevenLabs with", clean.length, "chars...");
+      const r = await fetch("/api/ai/speak", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: clean.slice(0, 2000) }),
+      });
+      const contentType = r.headers.get("content-type") || "";
+      console.log("[Voice] ElevenLabs response:", r.status, contentType);
 
-    // Browser TTS fallback
-    if (window.speechSynthesis) {
-      window.speechSynthesis.cancel();
-      const u = new SpeechSynthesisUtterance(clean); u.rate = 1.1; u.pitch = 0.95;
-      const voices = voicesRef.current.length > 0 ? voicesRef.current : window.speechSynthesis.getVoices();
-      const pref = voices.find((x) => x.name.includes("Samantha") || x.name.includes("Daniel") || x.name.includes("Google UK"))
-        || voices.find((x) => x.lang.startsWith("en") && x.name.includes("Google"))
-        || voices.find((x) => x.lang.startsWith("en")) || voices[0];
-      if (pref) u.voice = pref;
-      u.onstart = () => setIsSpeaking(true);
-      u.onend = () => { setIsSpeaking(false); if (voiceModeRef.current) setTimeout(startListening, 300); };
-      u.onerror = () => { setIsSpeaking(false); if (voiceModeRef.current) startListening(); };
-      window.speechSynthesis.speak(u);
-    } else if (voiceModeRef.current) {
-      startListening();
+      if (r.ok && contentType.includes("audio")) {
+        const blob = await r.blob();
+        if (blob.size > 100) { // Valid audio should be > 100 bytes
+          const url = URL.createObjectURL(blob);
+          const a = new Audio(url);
+          audioRef.current = a;
+          a.playbackRate = 1.15;
+          a.onplay = () => setIsSpeaking(true);
+          a.onended = () => { setIsSpeaking(false); URL.revokeObjectURL(url); audioRef.current = null; if (voiceModeRef.current) setTimeout(startListening, 300); };
+          a.onerror = (err) => { console.log("[Voice] Audio playback error, falling back to browser TTS"); setIsSpeaking(false); URL.revokeObjectURL(url); audioRef.current = null; speakBrowserTTS(clean); };
+          await a.play();
+          return;
+        }
+      }
+      // If we got here, ElevenLabs didn't return valid audio
+      const errText = await r.text().catch(() => "unknown");
+      console.log("[Voice] ElevenLabs not available:", r.status, errText.slice(0, 100));
+    } catch (e) {
+      console.log("[Voice] ElevenLabs error:", e.message);
     }
+
+    // Fallback to browser TTS
+    speakBrowserTTS(clean);
+  };
+
+  const speakBrowserTTS = (text) => {
+    if (!window.speechSynthesis) { if (voiceModeRef.current) startListening(); return; }
+    window.speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.rate = 1.1;
+    u.pitch = 0.95;
+    const voices = voicesRef.current.length > 0 ? voicesRef.current : window.speechSynthesis.getVoices();
+    const pref = voices.find((x) => x.name.includes("Samantha") || x.name.includes("Daniel") || x.name.includes("Google UK"))
+      || voices.find((x) => x.lang.startsWith("en") && x.name.includes("Google"))
+      || voices.find((x) => x.lang.startsWith("en")) || voices[0];
+    if (pref) u.voice = pref;
+    u.onstart = () => setIsSpeaking(true);
+    u.onend = () => { setIsSpeaking(false); if (voiceModeRef.current) setTimeout(startListening, 300); };
+    u.onerror = () => { setIsSpeaking(false); if (voiceModeRef.current) startListening(); };
+    window.speechSynthesis.speak(u);
   };
   const stopSpeaking = () => {
     if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }

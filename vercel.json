@@ -2,12 +2,19 @@
   "functions": {
     "app/api/ai/**": {
       "maxDuration": 60
+    },
+    "app/api/cron/**": {
+      "maxDuration": 60
     }
   },
   "crons": [
     {
       "path": "/api/cron/aggregate",
       "schedule": "*/5 9-16 * * 1-5"
+    },
+    {
+      "path": "/api/cron/discoveries",
+      "schedule": "0 11 * * 1-5"
     }
   ]
 }
