@@ -1,6 +1,24 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useRouter } from "next/navigation";
+
+// Tiny sparkline chart component
+function Sparkline({ data, width = 60, height = 24 }) {
+  if (!data || data.length < 2) return <div style={{ width, height }} />;
+  const prices = data.map((d) => d.close || d.price || d);
+  const min = Math.min(...prices);
+  const max = Math.max(...prices);
+  const range = max - min || 1;
+  const stepX = width / (prices.length - 1);
+  const points = prices.map((p, i) => `${i * stepX},${height - ((p - min) / range) * (height - 2) - 1}`).join(" ");
+  const isUp = prices[prices.length - 1] >= prices[0];
+  return (
+    <svg width={width} height={height} style={{ display: "block" }}>
+      <polyline points={points} fill="none" stroke={isUp ? "#10b981" : "#ef4444"} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
 
 function parseCSVLine(line) {
   // Handle quoted CSV fields properly (commas inside quotes)
@@ -94,12 +112,15 @@ function parseCSV(text) {
 }
 
 export default function PortfolioWidget({ prices, signals }) {
+  const router = useRouter();
   const [portfolio, setPortfolio] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isExpanded, setIsExpanded] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [showUpload, setShowUpload] = useState(false);
+  const [chartData, setChartData] = useState({});
   const fileInputRef = useRef(null);
+  const chartsFetched = useRef(false);
 
   const fetchPortfolio = useCallback(async () => {
     try {
@@ -114,9 +135,29 @@ export default function PortfolioWidget({ prices, signals }) {
     setLoading(false);
   }, []);
 
+  useEffect(() => { fetchPortfolio(); }, [fetchPortfolio]);
+
+  // Fetch sparkline data for each portfolio symbol
   useEffect(() => {
-    fetchPortfolio();
-  }, [fetchPortfolio]);
+    if (chartsFetched.current || portfolio.length === 0) return;
+    chartsFetched.current = true;
+    const fetchCharts = async () => {
+      const charts = {};
+      // Fetch in parallel, max 8 at a time
+      const symbols = portfolio.slice(0, 15).map((h) => h.symbol);
+      await Promise.all(symbols.map(async (sym) => {
+        try {
+          const r = await fetch(`/api/stocks/prices?type=historical&symbol=${sym}&timeframe=1Day&limit=5`);
+          if (r.ok) {
+            const d = await r.json();
+            if (d.bars?.length >= 2) charts[sym] = d.bars;
+          }
+        } catch {}
+      }));
+      setChartData(charts);
+    };
+    fetchCharts();
+  }, [portfolio]);
 
   const handleCSVUpload = async (e) => {
     const file = e.target.files[0];
@@ -335,16 +376,17 @@ export default function PortfolioWidget({ prices, signals }) {
                 <div className="flex items-center px-4 py-2 text-[9px] font-mono text-muted-foreground uppercase border-b border-border sticky top-0 bg-card">
                   <span className="w-2 mr-2" />
                   <span className="flex-1">Stock</span>
+                  <span className="w-[60px] text-center">5D</span>
                   <span className="w-20 text-right">Price</span>
                   <span className="w-20 text-right">P/L</span>
-                  <span className="w-16 text-right">Signal</span>
                   <span className="w-6" />
                 </div>
 
                 {holdings.map((h) => (
                   <div
                     key={h.symbol}
-                    className="flex items-center px-4 py-2.5 border-b border-border last:border-0 hover:bg-accent/20 transition-colors group"
+                    onClick={() => router.push(`/stock/${h.symbol}`)}
+                    className="flex items-center px-4 py-2.5 border-b border-border last:border-0 hover:bg-accent/20 transition-colors group cursor-pointer"
                   >
                     {/* Color indicator */}
                     <span className={`w-2 h-full min-h-[32px] rounded-full mr-2 flex-shrink-0 ${
@@ -358,6 +400,11 @@ export default function PortfolioWidget({ prices, signals }) {
                         <span className="text-[9px] text-muted-foreground">{h.shares} sh</span>
                       </div>
                       <div className="text-[10px] text-muted-foreground truncate">{h.name}</div>
+                    </div>
+
+                    {/* Sparkline chart */}
+                    <div className="w-[60px] flex items-center justify-center flex-shrink-0">
+                      <Sparkline data={chartData[h.symbol]} />
                     </div>
 
                     {/* Price */}
@@ -384,16 +431,9 @@ export default function PortfolioWidget({ prices, signals }) {
                       </div>
                     </div>
 
-                    {/* Signal */}
-                    <div className="w-16 text-right flex-shrink-0">
-                      <span className={`text-[9px] font-mono font-bold px-1.5 py-0.5 rounded ${h.signalBg} ${h.signalColor}`}>
-                        {h.signal}
-                      </span>
-                    </div>
-
                     {/* Remove */}
                     <button
-                      onClick={() => handleRemove(h.symbol)}
+                      onClick={(e) => { e.stopPropagation(); handleRemove(h.symbol); }}
                       className="w-6 opacity-0 group-hover:opacity-100 flex items-center justify-center rounded text-muted-foreground hover:text-red-500 transition-all flex-shrink-0"
                     >
                       <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">

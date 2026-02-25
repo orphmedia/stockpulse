@@ -29,7 +29,7 @@ async function* streamChat(reader) {
   }
 }
 
-export default function AIChat({ prices, news, signals, watchlist, portfolio, socialData, onWatchlistUpdate, onPortfolioUpdate }) {
+export default function AIChat({ prices, news, signals, watchlist, portfolio, socialData, onWatchlistUpdate, onPortfolioUpdate, dataReady }) {
   const { data: session } = useSession();
   const firstName = session?.user?.name?.split(" ")[0] || "there";
 
@@ -53,52 +53,50 @@ export default function AIChat({ prices, news, signals, watchlist, portfolio, so
   useEffect(() => { scrollToBottom(); }, [messages]);
   useEffect(() => { if (!voiceMode) inputRef.current?.focus(); }, [voiceMode]);
 
-  // Auto-briefing on login
-  const briefingSent = useRef(false);
+  // Welcome message (immediate, no API call)
   useEffect(() => {
     if (welcomeSent.current) return;
     welcomeSent.current = true;
     const h = new Date().getHours();
     const g = h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening";
-    setMessages([{ role: "assistant", content: `${g}, ${firstName}! Let me pull up your market briefing...` }]);
+    setMessages([{ role: "assistant", content: `${g}, ${firstName}! Loading your market data...` }]);
   }, [firstName]);
 
-  // Trigger auto-briefing once portfolio/prices are loaded
+  // Auto-briefing — only fires ONCE when dataReady becomes true
+  const briefingSent = useRef(false);
   useEffect(() => {
-    if (briefingSent.current || !portfolio || !prices) return;
-    const hasPortfolio = portfolio.length > 0;
-    const hasPrices = Object.keys(prices).length > 0;
-    if (!hasPortfolio && !hasPrices) return;
+    if (briefingSent.current || !dataReady) return;
     briefingSent.current = true;
 
     const h = new Date().getHours();
+    const day = new Date().getDay();
     const isPremarket = h < 9 || (h === 9 && new Date().getMinutes() < 30);
     const isAfterHours = h >= 16;
-    const isWeekend = [0, 6].includes(new Date().getDay());
+    const isWeekend = day === 0 || day === 6;
+    const hasPortfolio = portfolio && portfolio.length > 0;
 
     let briefingPrompt;
-    if (hasPortfolio) {
-      const holdingsList = portfolio.map(p => `${p.symbol} (${p.shares} shares @ $${p.avg_cost?.toFixed(2)})`).join(", ");
-      if (isWeekend) {
-        briefingPrompt = `Give me a weekend portfolio review. My holdings: ${holdingsList}. Summarize how my portfolio did this week and what to watch next week.`;
-      } else if (isPremarket) {
-        briefingPrompt = `Give me my premarket briefing. My holdings: ${holdingsList}. What happened overnight, any premarket movers in my portfolio, and what to watch for today?`;
-      } else if (isAfterHours) {
-        briefingPrompt = `Give me my after-hours recap. My holdings: ${holdingsList}. How did my portfolio do today? Any after-hours news or movers?`;
-      } else {
-        briefingPrompt = `Give me a quick market update. My holdings: ${holdingsList}. How's my portfolio doing right now and anything I should pay attention to?`;
-      }
+    if (isWeekend) {
+      briefingPrompt = hasPortfolio
+        ? "Give me a weekend portfolio review. How did my holdings do this week? What should I watch for Monday?"
+        : "Give me a weekend market recap. What were the big themes this week?";
+    } else if (isPremarket) {
+      briefingPrompt = hasPortfolio
+        ? "Give me my premarket morning briefing. How are futures looking? Any overnight news affecting my holdings? What should I watch today?"
+        : "Give me a premarket briefing. What are the top things to watch today?";
+    } else if (isAfterHours) {
+      briefingPrompt = hasPortfolio
+        ? "Give me my after-hours portfolio recap. How did my holdings do today? What moved the most? Any after-hours news?"
+        : "Give me an after-hours market recap. How did the market close today?";
     } else {
-      briefingPrompt = isPremarket
-        ? "Give me a premarket briefing. What are the top market movers and themes to watch today?"
-        : isAfterHours
-        ? "Give me an after-hours market recap. How did the market do today?"
-        : "Give me a quick market update. What's moving right now?";
+      briefingPrompt = hasPortfolio
+        ? "Give me a market update on my portfolio. How am I doing today? What's moving? Anything I should act on?"
+        : "Give me a quick market update. What's moving right now and what should I be looking at?";
     }
 
-    // Small delay to let streaming UI settle
-    setTimeout(() => submitMessage(briefingPrompt, true), 800);
-  }, [portfolio, prices]);
+    // Fire the briefing
+    setTimeout(() => submitMessage(briefingPrompt, true), 300);
+  }, [dataReady]);
 
   // Voice settings + preload voices
   const voicesRef = useRef([]);

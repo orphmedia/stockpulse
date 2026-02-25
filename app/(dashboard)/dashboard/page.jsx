@@ -72,13 +72,13 @@ export default function DashboardPage() {
           <h1 className="text-lg font-bold">StockPulse</h1>
           <div className="hidden sm:flex gap-3">
             {MARKET_INDICES.map((idx) => {
-              const p = prices[idx.symbol]; const prev = prevPrices[idx.symbol];
-              const ch = p?.price && prev?.price ? ((p.price - prev.price) / prev.price * 100) : 0;
+              const p = prices[idx.symbol];
+              const ch = p?.changePct || 0;
               return (
                 <div key={idx.symbol} className="flex items-center gap-1.5 text-[11px] font-mono">
                   <span className="text-muted-foreground">{idx.name}</span>
                   <span className="font-semibold">${p?.price?.toFixed(0) || "—"}</span>
-                  {ch !== 0 && <span className={ch > 0 ? "text-emerald-500" : "text-red-500"}>{ch > 0 ? "▲" : "▼"}{Math.abs(ch).toFixed(1)}%</span>}
+                  {ch !== 0 && <span className={ch > 0 ? "text-emerald-500" : "text-red-500"}>{ch > 0 ? "▲" : "▼"}{Math.abs(ch).toFixed(2)}%</span>}
                 </div>
               );
             })}
@@ -97,7 +97,7 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         {/* Left 2/3: Chat */}
         <div className="col-span-1 lg:col-span-2">
-          <AIChat prices={prices} news={news} signals={signals} watchlist={watchlistData} portfolio={portfolioHoldings} socialData={socialData} onWatchlistUpdate={handleDataUpdate} onPortfolioUpdate={handleDataUpdate} />
+          <AIChat prices={prices} news={news} signals={signals} watchlist={watchlistData} portfolio={portfolioHoldings} socialData={socialData} onWatchlistUpdate={handleDataUpdate} onPortfolioUpdate={handleDataUpdate} dataReady={!loading && Object.keys(prices).length > 0} />
         </div>
 
         {/* Right 1/3: Tabbed - Picks / Portfolio / Watchlist */}
@@ -130,14 +130,17 @@ export default function DashboardPage() {
               {watchlistSymbols.length > 0 ? (
                 <div className="space-y-1.5">
                   {watchlistSymbols.map((sym) => {
-                    const p = prices[sym]; const prev = prevPrices[sym];
-                    const ch = p?.price && prev?.price ? ((p.price - prev.price) / prev.price * 100) : 0;
+                    const p = prices[sym];
+                    const ch = p?.changePct || 0;
                     return (
                       <a key={sym} href={`/stock/${sym}`} className="flex items-center justify-between p-2.5 bg-background rounded-lg hover:bg-accent/50 transition-all cursor-pointer">
-                        <span className="font-mono font-bold text-xs">{sym}</span>
+                        <div>
+                          <span className="font-mono font-bold text-xs">{sym}</span>
+                          {p?.name && <span className="text-[9px] text-muted-foreground ml-1.5">{p.name}</span>}
+                        </div>
                         <div className="flex items-center gap-2">
-                          <span className="font-mono text-xs">${p?.price?.toFixed(2) || "—"}</span>
-                          {ch !== 0 && <span className={`text-[10px] font-mono font-semibold ${ch > 0 ? "text-emerald-500" : "text-red-500"}`}>{ch > 0 ? "▲" : "▼"}{Math.abs(ch).toFixed(1)}%</span>}
+                          <span className="font-mono text-xs font-semibold">${p?.price?.toFixed(2) || "—"}</span>
+                          {ch !== 0 && <span className={`text-[10px] font-mono font-semibold ${ch > 0 ? "text-emerald-500" : "text-red-500"}`}>{ch > 0 ? "▲" : "▼"}{Math.abs(ch).toFixed(2)}%</span>}
                         </div>
                       </a>
                     );

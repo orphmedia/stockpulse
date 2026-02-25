@@ -85,12 +85,19 @@ export default function StockDetailPage() {
   const fetchBars = useCallback(async () => {
     const tf = TIMEFRAMES.find((t) => t.value === timeframe);
     try {
-      const r = await fetch(`/api/stocks/prices?type=historical&symbol=${sym}&timeframe=${tf.tf}&limit=${tf.limit}`);
+      const url = `/api/stocks/prices?type=historical&symbol=${sym}&timeframe=${tf.tf}&limit=${tf.limit}`;
+      console.log("[StockDetail] Fetching bars:", url);
+      const r = await fetch(url);
       if (r.ok) {
         const d = await r.json();
+        console.log("[StockDetail] Got", d.bars?.length || 0, "bars for", sym);
         setBars(d.bars || []);
+      } else {
+        console.error("[StockDetail] Bars fetch failed:", r.status);
       }
-    } catch {}
+    } catch (e) {
+      console.error("[StockDetail] Bars error:", e);
+    }
   }, [sym, timeframe]);
 
   // Fetch news
