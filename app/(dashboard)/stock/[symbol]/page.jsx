@@ -9,6 +9,7 @@ const TIMEFRAMES = [
   { label: "1M", value: "1m", tf: "1Day", limit: 22 },
   { label: "3M", value: "3m", tf: "1Day", limit: 63 },
   { label: "1Y", value: "1y", tf: "1Day", limit: 252 },
+  { label: "5Y", value: "5y", tf: "1Week", limit: 260 },
 ];
 
 function MiniChart({ bars, height = 200 }) {
@@ -291,12 +292,16 @@ export default function StockDetailPage() {
       {quote && (
         <div className="bg-card border border-border rounded-2xl p-5">
           <h3 className="text-xs font-mono font-semibold text-muted-foreground mb-3">KEY DATA</h3>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {[
-              { label: "Price", value: `$${quote.price?.toFixed(2) || "—"}` },
-              { label: "Prev Close", value: `$${quote.prevClose?.toFixed(2) || "—"}` },
-              { label: "Bid", value: `$${quote.bid?.toFixed(2) || "—"}` },
-              { label: "Ask", value: `$${quote.ask?.toFixed(2) || "—"}` },
+              { label: "Open", value: quote.open ? `$${quote.open.toFixed(2)}` : "—" },
+              { label: "Prev Close", value: quote.prevClose ? `$${quote.prevClose.toFixed(2)}` : "—" },
+              { label: "Day High", value: quote.high ? `$${quote.high.toFixed(2)}` : "—" },
+              { label: "Day Low", value: quote.low ? `$${quote.low.toFixed(2)}` : "—" },
+              { label: "Volume", value: quote.volume ? (quote.volume >= 1e9 ? `${(quote.volume/1e9).toFixed(2)}B` : quote.volume >= 1e6 ? `${(quote.volume/1e6).toFixed(1)}M` : `${(quote.volume/1e3).toFixed(0)}K`) : "—" },
+              { label: "Market Cap", value: quote.marketCap ? (quote.marketCap >= 1e12 ? `$${(quote.marketCap/1e12).toFixed(2)}T` : quote.marketCap >= 1e9 ? `$${(quote.marketCap/1e9).toFixed(1)}B` : `$${(quote.marketCap/1e6).toFixed(0)}M`) : "—" },
+              { label: "P/E Ratio", value: quote.pe > 0 ? quote.pe.toFixed(1) : "—" },
+              { label: "EPS", value: quote.eps ? `$${quote.eps.toFixed(2)}` : "—" },
             ].map((s) => (
               <div key={s.label} className="bg-background rounded-lg p-3">
                 <div className="text-[10px] font-mono text-muted-foreground">{s.label}</div>
@@ -304,6 +309,44 @@ export default function StockDetailPage() {
               </div>
             ))}
           </div>
+
+          {/* 52 Week Range */}
+          {quote.week52Low > 0 && quote.week52High > 0 && (
+            <div className="mt-3 bg-background rounded-lg p-3">
+              <div className="text-[10px] font-mono text-muted-foreground mb-2">52-WEEK RANGE</div>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-mono text-red-400">${quote.week52Low.toFixed(2)}</span>
+                <div className="flex-1 h-2 bg-border rounded-full relative">
+                  <div
+                    className="absolute top-0 h-2 w-2 bg-blue-500 rounded-full -translate-x-1"
+                    style={{ left: `${Math.min(100, Math.max(0, ((quote.price - quote.week52Low) / (quote.week52High - quote.week52Low)) * 100))}%` }}
+                  />
+                </div>
+                <span className="text-[10px] font-mono text-emerald-400">${quote.week52High.toFixed(2)}</span>
+              </div>
+            </div>
+          )}
+
+          {/* Dividend Info */}
+          {(quote.dividendRate > 0 || quote.dividendYield > 0) && (
+            <div className="mt-3 bg-background rounded-lg p-3">
+              <div className="text-[10px] font-mono text-muted-foreground mb-2">DIVIDEND</div>
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <div className="text-[9px] font-mono text-muted-foreground">Annual Rate</div>
+                  <div className="font-mono font-bold text-sm text-emerald-500">${quote.dividendRate.toFixed(2)}</div>
+                </div>
+                <div>
+                  <div className="text-[9px] font-mono text-muted-foreground">Yield</div>
+                  <div className="font-mono font-bold text-sm text-emerald-500">{quote.dividendYield.toFixed(2)}%</div>
+                </div>
+                <div>
+                  <div className="text-[9px] font-mono text-muted-foreground">Ex-Div Date</div>
+                  <div className="font-mono font-bold text-sm">{quote.exDividendDate || "—"}</div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

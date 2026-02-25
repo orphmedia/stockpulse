@@ -41,8 +41,14 @@ export async function GET(request) {
 
       // Try Yahoo Finance chart first (free, reliable)
       try {
-        const range = timeframe === "5Min" ? "1d" : timeframe === "30Min" ? "5d" : limit <= 25 ? "1mo" : limit <= 65 ? "3mo" : "1y";
-        const interval = timeframe === "5Min" ? "5m" : timeframe === "30Min" ? "30m" : "1d";
+        let range, interval;
+        if (timeframe === "5Min") { range = "1d"; interval = "5m"; }
+        else if (timeframe === "30Min") { range = "5d"; interval = "30m"; }
+        else if (timeframe === "1Week") { range = "5y"; interval = "1wk"; }
+        else if (limit <= 25) { range = "1mo"; interval = "1d"; }
+        else if (limit <= 65) { range = "3mo"; interval = "1d"; }
+        else { range = "1y"; interval = "1d"; }
+
         const yRes = await fetch(
           `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?range=${range}&interval=${interval}`,
           { headers: { "User-Agent": "Mozilla/5.0" }, cache: "no-store" }

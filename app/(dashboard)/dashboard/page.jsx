@@ -12,6 +12,33 @@ const MARKET_INDICES = [
   { symbol: "DIA", name: "Dow Jones" },
 ];
 
+// Inline sparkline SVG
+function Sparkline({ data, width = 120, height = 32 }) {
+  if (!data || data.length < 2) return <div style={{ width, height }} />;
+  const prices = data.map((d) => d.close || d.price || d);
+  const min = Math.min(...prices);
+  const max = Math.max(...prices);
+  const range = max - min || 1;
+  const stepX = width / (prices.length - 1);
+  const points = prices.map((p, i) => `${i * stepX},${height - ((p - min) / range) * (height - 4) - 2}`).join(" ");
+  const isUp = prices[prices.length - 1] >= prices[0];
+  const color = isUp ? "#10b981" : "#ef4444";
+  // Area fill
+  const areaPoints = `0,${height} ${points} ${(prices.length - 1) * stepX},${height}`;
+  return (
+    <svg width={width} height={height} style={{ display: "block" }}>
+      <defs>
+        <linearGradient id={`sg-${isUp ? "up" : "dn"}`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity="0.2" />
+          <stop offset="100%" stopColor={color} stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <polygon points={areaPoints} fill={`url(#sg-${isUp ? "up" : "dn"})`} />
+      <polyline points={points} fill="none" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 export default function DashboardPage() {
   const { data: session } = useSession();
   const [prices, setPrices] = useState({});
@@ -28,7 +55,9 @@ export default function DashboardPage() {
   const [isLive, setIsLive] = useState(true);
   const [portfolioKey, setPortfolioKey] = useState(0);
   const [sidePanel, setSidePanel] = useState("picks");
+  const [indexCharts, setIndexCharts] = useState({});
   const intervalRef = useRef(null);
+  const chartsFetched = useRef(false);
 
   const allSymbols = [...new Set([...portfolioSymbols, ...watchlistSymbols, ...MARKET_INDICES.map((i) => i.symbol)])];
   const symbolsParam = allSymbols.length > 0 ? allSymbols.join(",") : "SPY,QQQ,DIA";
@@ -62,6 +91,26 @@ export default function DashboardPage() {
   useEffect(() => { fetchPrices(); fetchNews(); }, [symbolsParam]);
   useEffect(() => { if (!isLive) { clearInterval(intervalRef.current); return; } intervalRef.current = setInterval(fetchPrices, 10000); return () => clearInterval(intervalRef.current); }, [fetchPrices, isLive]);
 
+  // Fetch intraday charts for market indices (once)
+  useEffect(() => {
+    if (chartsFetched.current || loading) return;
+    chartsFetched.current = true;
+    const fetchCharts = async () => {
+      const charts = {};
+      await Promise.all(MARKET_INDICES.map(async (idx) => {
+        try {
+          const r = await fetch(`/api/stocks/prices?type=historical&symbol=${idx.symbol}&timeframe=5Min&limit=78`);
+          if (r.ok) {
+            const d = await r.json();
+            if (d.bars?.length >= 2) charts[idx.symbol] = d.bars;
+          }
+        } catch {}
+      }));
+      setIndexCharts(charts);
+    };
+    fetchCharts();
+  }, [loading]);
+
   const handleDataUpdate = () => setPortfolioKey((k) => k + 1);
 
   return (
@@ -78,7 +127,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Market indices with full data */}
+      {/* Market indices with charts */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         {MARKET_INDICES.map((idx) => {
           const p = prices[idx.symbol];
@@ -86,7 +135,7 @@ export default function DashboardPage() {
           const vol = p?.volume || 0;
           const fmtVol = vol >= 1e9 ? `${(vol / 1e9).toFixed(2)}B` : vol >= 1e6 ? `${(vol / 1e6).toFixed(1)}M` : vol >= 1e3 ? `${(vol / 1e3).toFixed(0)}K` : `${vol}`;
           return (
-            <div key={idx.symbol} className="bg-card border border-border rounded-xl p-3">
+            <a key={idx.symbol} href={`/stock/${idx.symbol}`} className="bg-card border border-border rounded-xl p-3 hover:bg-accent/30 transition-all cursor-pointer block">
               <div className="flex items-center justify-between mb-1">
                 <span className="text-[10px] font-mono text-muted-foreground">{idx.name}</span>
                 {ch !== 0 && (
@@ -95,21 +144,25 @@ export default function DashboardPage() {
                   </span>
                 )}
               </div>
-              <div className="flex items-baseline gap-2">
-                <span className="font-mono font-bold text-lg">${p?.price?.toFixed(2) || "—"}</span>
-                {p?.change != null && (
-                  <span className={`text-xs font-mono ${p.change >= 0 ? "text-emerald-500" : "text-red-500"}`}>
-                    {p.change >= 0 ? "+" : ""}{p.change.toFixed(2)}
-                  </span>
-                )}
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="flex items-baseline gap-2">
+                    <span className="font-mono font-bold text-lg">${p?.price?.toFixed(2) || "—"}</span>
+                    {p?.change != null && (
+                      <span className={`text-xs font-mono ${p.change >= 0 ? "text-emerald-500" : "text-red-500"}`}>
+                        {p.change >= 0 ? "+" : ""}{p.change.toFixed(2)}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3 mt-1 text-[9px] font-mono text-muted-foreground">
+                    {vol > 0 && <span>Vol: {fmtVol}</span>}
+                    {p?.high > 0 && <span>H: ${p.high.toFixed(2)}</span>}
+                    {p?.low > 0 && <span>L: ${p.low.toFixed(2)}</span>}
+                  </div>
+                </div>
+                <Sparkline data={indexCharts[idx.symbol]} width={100} height={36} />
               </div>
-              <div className="flex items-center gap-3 mt-1.5 text-[9px] font-mono text-muted-foreground">
-                {vol > 0 && <span>Vol: {fmtVol}</span>}
-                {p?.high > 0 && <span>H: ${p.high.toFixed(2)}</span>}
-                {p?.low > 0 && <span>L: ${p.low.toFixed(2)}</span>}
-                {p?.open > 0 && <span>O: ${p.open.toFixed(2)}</span>}
-              </div>
-            </div>
+            </a>
           );
         })}
       </div>
