@@ -347,6 +347,63 @@ export default function StockDetailPage() {
               </div>
             </div>
           )}
+
+          {/* Analyst Consensus */}
+          {(quote.numAnalysts > 0 || quote.targetMean > 0) && (
+            <div className="mt-3 bg-background rounded-lg p-3">
+              <div className="text-[10px] font-mono text-muted-foreground mb-2">ANALYST CONSENSUS</div>
+              <div className="flex items-center gap-3 mb-2 flex-wrap">
+                {quote.analystRating && (
+                  <span className={`px-3 py-1 rounded-lg text-sm font-mono font-bold ${
+                    quote.analystRating.includes("Buy") ? "bg-emerald-500/15 text-emerald-500"
+                    : quote.analystRating.includes("Sell") ? "bg-red-500/15 text-red-500"
+                    : "bg-yellow-500/15 text-yellow-500"
+                  }`}>{quote.analystRating}</span>
+                )}
+                {quote.numAnalysts > 0 && <span className="text-xs text-muted-foreground">{quote.numAnalysts} analysts</span>}
+              </div>
+              {quote.targetMean > 0 && (
+                <div className="grid grid-cols-3 gap-3">
+                  <div>
+                    <div className="text-[9px] font-mono text-muted-foreground">Low Target</div>
+                    <div className="font-mono font-bold text-sm text-red-400">${quote.targetLow?.toFixed(2) || "—"}</div>
+                  </div>
+                  <div>
+                    <div className="text-[9px] font-mono text-muted-foreground">Avg Target</div>
+                    <div className="font-mono font-bold text-sm">${quote.targetMean.toFixed(2)}</div>
+                    {quote.price > 0 && (
+                      <div className={`text-[9px] font-mono ${quote.targetMean > quote.price ? "text-emerald-500" : "text-red-400"}`}>
+                        {quote.targetMean > quote.price ? "+" : ""}{((quote.targetMean - quote.price) / quote.price * 100).toFixed(1)}%
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <div className="text-[9px] font-mono text-muted-foreground">High Target</div>
+                    <div className="font-mono font-bold text-sm text-emerald-400">${quote.targetHigh?.toFixed(2) || "—"}</div>
+                  </div>
+                </div>
+              )}
+              {/* Target price range bar */}
+              {quote.targetLow > 0 && quote.targetHigh > 0 && quote.price > 0 && (
+                <div className="flex items-center gap-2 mt-2">
+                  <span className="text-[9px] font-mono text-red-400">${quote.targetLow.toFixed(0)}</span>
+                  <div className="flex-1 h-2 bg-border rounded-full relative">
+                    <div
+                      className="absolute top-0 h-2 w-2 bg-blue-500 rounded-full -translate-x-1"
+                      style={{ left: `${Math.min(100, Math.max(0, ((quote.price - quote.targetLow) / (quote.targetHigh - quote.targetLow)) * 100))}%` }}
+                    />
+                    {quote.targetMean > 0 && (
+                      <div
+                        className="absolute top-0 h-2 w-0.5 bg-yellow-500"
+                        style={{ left: `${Math.min(100, Math.max(0, ((quote.targetMean - quote.targetLow) / (quote.targetHigh - quote.targetLow)) * 100))}%` }}
+                      />
+                    )}
+                  </div>
+                  <span className="text-[9px] font-mono text-emerald-400">${quote.targetHigh.toFixed(0)}</span>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>
