@@ -95,7 +95,7 @@ export async function POST(request) {
     const p = prices[h.symbol];
     const cur = p?.price || 0;
     const shares = h.shares || 0;
-    const cost = h.avg_cost || 0;
+    const cost = h.avg_cost || h.cost_basis || 0;
     const mktVal = cur * shares;
     const pnl = (cur - cost) * shares;
     const pnlPct = cost > 0 ? ((cur - cost) / cost * 100) : 0;
@@ -103,14 +103,15 @@ export async function POST(request) {
     totalValue += mktVal;
     totalCost += cost * shares;
     totalDayPnl += dayPnl;
-    return `${h.symbol}: ${shares} sh @ $${cost.toFixed(2)} → $${cur.toFixed(2)} | val $${mktVal.toFixed(0)} | P/L ${pnl >= 0 ? "+" : ""}$${pnl.toFixed(0)} (${pnlPct.toFixed(1)}%) | today ${dayPnl >= 0 ? "+" : ""}$${dayPnl.toFixed(2)}`;
+    return `${h.symbol} (${p?.name || h.name || h.symbol}): ${shares} sh @ $${cost.toFixed(2)} → $${cur.toFixed(2)} | val $${mktVal.toFixed(0)} | P/L ${pnl >= 0 ? "+" : ""}$${pnl.toFixed(0)} (${pnlPct.toFixed(1)}%) | today ${dayPnl >= 0 ? "+" : ""}$${dayPnl.toFixed(2)}`;
   }).join("\n");
   const totalPnl = totalValue - totalCost;
   const totalPnlPct = totalCost > 0 ? (totalPnl / totalCost * 100).toFixed(1) : "0";
+  const holdingCount = (portfolio || []).length;
 
   const wl = (watchlist || []).slice(0, 10).map(w => w.symbol).join(", ");
 
-  const system = `You are ${first}'s personal stock AI. Be direct and actionable. No markdown, no bullets, no asterisks.
+  const system = `You are ${first}'s personal stock AI assistant. Be direct and actionable. No markdown, no bullets, no asterisks.
 
 TODAY: ${dateStr}, ${timeStr} ET — ${marketStatus}
 
@@ -120,16 +121,19 @@ ${indices}
 STOCK QUOTES (LIVE):
 ${quoteLines || "No individual stock data"}
 
-PORTFOLIO TOTALS: Value $${totalValue.toFixed(0)} | Cost $${totalCost.toFixed(0)} | Total P/L ${totalPnl >= 0 ? "+" : ""}$${totalPnl.toFixed(0)} (${totalPnlPct}%) | Today ${totalDayPnl >= 0 ? "+" : ""}$${totalDayPnl.toFixed(2)}
-HOLDINGS:
-${portfolioLines || "Empty portfolio"}
+PORTFOLIO (${holdingCount} holdings):
+Total Value: $${totalValue.toFixed(0)} | Cost Basis: $${totalCost.toFixed(0)} | Total P/L: ${totalPnl >= 0 ? "+" : ""}$${totalPnl.toFixed(0)} (${totalPnlPct}%) | Today: ${totalDayPnl >= 0 ? "+" : ""}$${totalDayPnl.toFixed(2)}
+${portfolioLines || "No holdings loaded yet"}
 
 WATCHLIST: ${wl || "none"}
 
 RULES:
+- ${first}'s portfolio has ${holdingCount} holdings listed above. NEVER say the portfolio is empty if holdings are listed.
 - All prices above are LIVE and REAL from Yahoo Finance. Use them confidently with exact numbers.
+- ALWAYS refer to stocks by their company name AND symbol. Example: "Apple (AAPL)" not just "AAPL".
+- Recognize common stock ticker symbols. Examples: AAPL = Apple, MSFT = Microsoft, NVDA = NVIDIA, GOOG = Alphabet/Google, AMZN = Amazon, META = Meta, SCHD = Schwab US Dividend Equity ETF, VOO = Vanguard S&P 500 ETF, XOM = Exxon Mobil, JNJ = Johnson & Johnson, AEP = American Electric Power, RKLB = Rocket Lab.
 - For briefings: state date/time, market status, portfolio total value and today's P/L, biggest movers, and 1-2 actionable suggestions. 4-6 sentences.
-- For stock questions: 1-3 sentences with actual price data. Give BUY/SELL/HOLD.
+- For stock questions: 1-3 sentences with actual price data. Give BUY/SELL/HOLD opinion.
 - For stocks you have data for: cite the exact price, change, and %.
 - For stocks NOT in the data: say you need to add it to the watchlist to get live tracking.
 

@@ -403,7 +403,7 @@ export default function DashboardPage() {
               <div className="flex-1 min-w-0">
                 <div className="text-[9px] font-mono text-muted-foreground">{idx.name}</div>
                 <div className="flex items-baseline gap-2">
-                  <span className="font-mono font-bold text-sm">${p?.price?.toFixed(2) || "—"}</span>
+                  <span className="font-mono font-bold text-sm">{p?.price ? `$${p.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "—"}</span>
                   {ch !== 0 && (
                     <span className={`text-[10px] font-mono font-bold ${ch > 0 ? "text-emerald-500" : "text-red-500"}`}>
                       {ch > 0 ? "▲" : "▼"}{Math.abs(ch).toFixed(2)}%
@@ -658,18 +658,19 @@ export default function DashboardPage() {
                   {watchlistSymbols.map((sym) => {
                     const p = prices[sym];
                     const ch = p?.changePct || 0;
+                    const isUp = ch > 0;
                     return (
                       <a key={sym} href={`/stock/${sym}`} className="flex items-center justify-between p-2.5 bg-background rounded-lg hover:bg-accent/50 transition-all cursor-pointer">
-                        <div className="flex items-center gap-2">
-                          <div>
+                        <div className="flex flex-col gap-1">
+                          <div className="flex items-center gap-2">
                             <span className="font-mono font-bold text-xs">{sym}</span>
-                            {p?.name && <div className="text-[9px] text-muted-foreground">{p.name}</div>}
+                            <AnalystBadge rating={p?.analystRating} />
                           </div>
-                          <AnalystBadge rating={p?.analystRating} />
+                          {p?.name && <div className="text-[9px] text-muted-foreground">{p.name}</div>}
                         </div>
                         <div className="text-right">
-                          <span className="font-mono text-xs font-semibold">${p?.price?.toFixed(2) || "—"}</span>
-                          {ch !== 0 && <div className={`text-[10px] font-mono font-semibold ${ch > 0 ? "text-emerald-500" : "text-red-500"}`}>{ch > 0 ? "▲" : "▼"}{Math.abs(ch).toFixed(2)}%</div>}
+                          <span className={`font-mono text-xs font-semibold ${isUp ? "text-emerald-500" : ch < 0 ? "text-red-500" : ""}`}>${p?.price?.toFixed(2) || "—"}</span>
+                          {ch !== 0 && <div className={`text-[10px] font-mono font-semibold ${isUp ? "text-emerald-500" : "text-red-500"}`}>{isUp ? "▲" : "▼"}{Math.abs(ch).toFixed(2)}%</div>}
                           {p?.targetMean > 0 && (
                             <div className="text-[8px] font-mono text-muted-foreground">
                               Target: ${p.targetMean.toFixed(0)}
