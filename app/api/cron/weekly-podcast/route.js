@@ -228,7 +228,7 @@ RESPOND WITH VALID JSON ONLY:
 }
 
 RULES:
-- Script should have 18-24 exchanges (about 3 minutes when spoken)
+- Script should have 12-16 exchanges (about 2-3 minutes when spoken)
 - Keep each line conversational and natural, not corporate/stiff
 - Hosts should have personality — Sarah is more aggressive, Mike is more cautious
 - Include at least one point of disagreement between hosts
@@ -244,7 +244,7 @@ RULES:
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
+        model: "claude-haiku-4-5-20251001",
         max_tokens: 4000,
         tools: [{ type: "web_search_20250305", name: "web_search" }],
         messages: [{ role: "user", content: prompt }],
@@ -320,8 +320,8 @@ RULES:
       updated_at: new Date().toISOString(),
     }, { onConflict: "key" });
 
-    // Send notifications
-    await sendNotifications(podcast.summary, podcast.suggestions?.length || 0);
+    // Send notifications (fire and forget — don't await to save time)
+    sendNotifications(podcast.summary, podcast.suggestions?.length || 0).catch(() => {});
 
     console.log("[Weekly Podcast] Generated", podcast.script?.length, "dialogue lines,", podcast.suggestions?.length, "suggestions");
 
