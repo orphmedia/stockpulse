@@ -274,6 +274,7 @@ export default function DashboardPage() {
         const url = URL.createObjectURL(blob);
         setPodcastAudioUrl(url);
         const audio = new Audio(url);
+        audio.playbackRate = 1.25;
         podcastAudioRef.current = audio;
         audio.play();
       }
@@ -469,16 +470,38 @@ export default function DashboardPage() {
   // Render workflow results
   const renderWorkflowResult = () => {
     if (!workflowResult) return null;
-    if (workflowResult.error) return <div className="text-red-400 text-sm p-3">{workflowResult.error}</div>;
+    if (workflowResult.error) return <div className="text-red-500 text-sm p-3">{workflowResult.error}</div>;
 
     const data = workflowResult.result || workflowResult;
     const wfLabel = WORKFLOWS.find((w) => w.id === workflowId)?.label || "Analysis";
 
+    // Render an object item nicely (e.g. dividend entries, stock suggestions)
+    const renderItem = (item) => {
+      if (typeof item === "string") return item;
+      if (typeof item !== "object" || item === null) return String(item);
+      // Format known fields nicely
+      const { symbol, exDate, amount, payDate, change, detail, reason, yield: yld, ...rest } = item;
+      const parts = [];
+      if (symbol) parts.push(<span key="sym" className="font-mono font-bold text-primary">{symbol}</span>);
+      if (exDate) parts.push(<span key="ex"> — Ex-div: {exDate}</span>);
+      if (amount) parts.push(<span key="amt"> ({amount})</span>);
+      if (payDate) parts.push(<span key="pay" className="text-muted-foreground"> · Pay: {payDate}</span>);
+      if (change) parts.push(<span key="ch" className={change === "increase" ? "text-emerald-500" : "text-red-500"}> {change}</span>);
+      if (detail) parts.push(<span key="det"> — {detail}</span>);
+      if (reason) parts.push(<span key="rsn"> — {reason}</span>);
+      if (yld) parts.push(<span key="yld" className="font-mono text-emerald-500"> ({yld})</span>);
+      // Render any remaining fields
+      Object.entries(rest).forEach(([k, v]) => {
+        if (v) parts.push(<span key={k}> · {k.replace(/([A-Z])/g, " $1").trim()}: {String(v)}</span>);
+      });
+      return parts.length > 0 ? <>{parts}</> : JSON.stringify(item);
+    };
+
     return (
-      <div className="bg-card border border-border rounded-2xl p-4 space-y-3">
+      <div className="bg-card border border-border rounded-2xl p-5 space-y-3">
         <div className="flex items-center justify-between">
-          <h3 className="text-xs font-mono font-semibold text-blue-400">{wfLabel.toUpperCase()} RESULTS</h3>
-          <button onClick={() => { setWorkflowResult(null); setWorkflowId(null); }} className="text-[10px] text-muted-foreground hover:text-foreground">✕ Close</button>
+          <h3 className="text-sm font-mono font-semibold text-blue-500">{wfLabel.toUpperCase()} RESULTS</h3>
+          <button onClick={() => { setWorkflowResult(null); setWorkflowId(null); }} className="text-xs text-muted-foreground hover:text-foreground">✕ Close</button>
         </div>
         <div className="text-sm leading-relaxed space-y-2">
           {typeof data === "string" ? (
@@ -488,20 +511,20 @@ export default function DashboardPage() {
               if (key === "error" || key === "model") return null;
               const label = key.replace(/([A-Z])/g, " $1").replace(/_/g, " ").trim();
               return (
-                <div key={key} className="bg-background rounded-lg p-3">
-                  <div className="text-[9px] font-mono font-semibold text-muted-foreground uppercase mb-1">{label}</div>
+                <div key={key} className="bg-background rounded-xl p-3">
+                  <div className="text-[10px] font-mono font-semibold text-muted-foreground uppercase mb-2">{label}</div>
                   {Array.isArray(val) ? (
-                    <ul className="text-xs space-y-1">
-                      {val.map((item, i) => <li key={i}>• {typeof item === "object" ? JSON.stringify(item) : item}</li>)}
+                    <ul className="text-sm space-y-2">
+                      {val.map((item, i) => <li key={i} className="flex items-start gap-2"><span className="text-muted-foreground mt-0.5">•</span><span>{renderItem(item)}</span></li>)}
                     </ul>
                   ) : typeof val === "object" && val !== null ? (
-                    <div className="text-xs space-y-1">
+                    <div className="text-sm space-y-1">
                       {Object.entries(val).map(([k, v]) => (
                         <div key={k}><span className="text-muted-foreground">{k.replace(/([A-Z])/g, " $1").trim()}:</span> {String(v)}</div>
                       ))}
                     </div>
                   ) : (
-                    <p className="text-xs">{String(val)}</p>
+                    <p className="text-sm">{String(val)}</p>
                   )}
                 </div>
               );
