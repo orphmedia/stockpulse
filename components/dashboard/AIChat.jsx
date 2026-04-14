@@ -29,7 +29,7 @@ async function* streamChat(reader) {
   }
 }
 
-export default function AIChat({ prices, news, signals, watchlist, portfolio, socialData, onWatchlistUpdate, onPortfolioUpdate, dataReady }) {
+export default function AIChat({ prices, news, signals, watchlist, portfolio, socialData, onWatchlistUpdate, onPortfolioUpdate, dataReady, morningBrief }) {
   const { data: session } = useSession();
   const firstName = session?.user?.name?.split(" ")[0] || "there";
 
@@ -75,22 +75,35 @@ export default function AIChat({ prices, news, signals, watchlist, portfolio, so
     const isWeekend = day === 0 || day === 6;
     const hasPortfolio = portfolio && portfolio.length > 0;
 
+    // Build metrics context from morningBrief so the AI has exact numbers
+    let metricsContext = "";
+    if (morningBrief && hasPortfolio) {
+      const { totalValue, dayChange, totalPL, topMover, topMoverChange, portfolioScore } = morningBrief;
+      const parts = [];
+      if (totalValue > 0) parts.push(`Portfolio value: $${totalValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}`);
+      if (dayChange !== undefined) parts.push(`Today: ${dayChange >= 0 ? "+" : ""}$${dayChange.toFixed(0)}`);
+      if (totalPL !== undefined) parts.push(`Total P/L: ${totalPL >= 0 ? "+" : ""}$${totalPL.toLocaleString(undefined, { maximumFractionDigits: 0 })}`);
+      if (portfolioScore) parts.push(`Portfolio score: ${portfolioScore.score}/100 (${portfolioScore.grade})`);
+      if (topMover && topMoverChange !== undefined) parts.push(`Top mover: ${topMover} ${topMoverChange >= 0 ? "+" : ""}${topMoverChange.toFixed(1)}%`);
+      metricsContext = `\n\nHere are my exact portfolio metrics (use these numbers, don't re-derive): ${parts.join(". ")}.`;
+    }
+
     let briefingPrompt;
     if (isWeekend) {
       briefingPrompt = hasPortfolio
-        ? "Give me a weekend portfolio review. How did my holdings do this week? What should I watch for Monday?"
+        ? "Give me a weekend portfolio review. How did my holdings do this week? What should I watch for Monday?" + metricsContext
         : "Give me a weekend market recap. What were the big themes this week?";
     } else if (isPremarket) {
       briefingPrompt = hasPortfolio
-        ? "Give me my premarket morning briefing. How are futures looking? Any overnight news affecting my holdings? What should I watch today?"
+        ? "Give me my premarket morning briefing. How are futures looking? Any overnight news affecting my holdings? What should I watch today?" + metricsContext
         : "Give me a premarket briefing. What are the top things to watch today?";
     } else if (isAfterHours) {
       briefingPrompt = hasPortfolio
-        ? "Give me my after-hours portfolio recap. How did my holdings do today? What moved the most? Any after-hours news?"
+        ? "Give me my after-hours portfolio recap. How did my holdings do today? What moved the most? Any after-hours news?" + metricsContext
         : "Give me an after-hours market recap. How did the market close today?";
     } else {
       briefingPrompt = hasPortfolio
-        ? "Give me a market update on my portfolio. How am I doing today? What's moving? Anything I should act on?"
+        ? "Give me a market update on my portfolio. How am I doing today? What's moving? Anything I should act on?" + metricsContext
         : "Give me a quick market update. What's moving right now and what should I be looking at?";
     }
 
@@ -425,7 +438,7 @@ export default function AIChat({ prices, news, signals, watchlist, portfolio, so
                     msg.role === "user" ? "bg-blue-500 text-white rounded-br-md" : msg.isError ? "bg-red-500/10 text-red-400 rounded-bl-md" : "bg-accent/80 rounded-bl-md"
                   }`}>{msg.content}
                     {msg.actions?.length > 0 && (
-                      <div className="mt-2 pt-2 border-t border-white/10 space-y-1">
+                      <div className="mt-2 pt-2 border-t border-border space-y-1">
                         {msg.actions.map((a, j) => (
                           <div key={j} className="flex items-center gap-2 text-[11px]">
                             <span className={`px-1.5 py-0.5 rounded font-mono font-bold ${a.type.includes("add") || a.type === "monitor" ? "bg-emerald-500/20 text-emerald-400" : "bg-red-500/20 text-red-400"}`}>

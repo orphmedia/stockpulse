@@ -15,6 +15,10 @@
     {
       "path": "/api/cron/discoveries",
       "schedule": "0 11 * * 1-5"
+    },
+    {
+      "path": "/api/cron/weekly-podcast",
+      "schedule": "0 21 * * 5"
     }
   ]
 }
