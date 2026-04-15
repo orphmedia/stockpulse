@@ -86,6 +86,8 @@ export default function DashboardPage() {
   const [podcastAudioUrl, setPodcastAudioUrl] = useState(null);
   const [podcastGenerating, setPodcastGenerating] = useState(false);
   const [showPodcastTranscript, setShowTranscript] = useState(false);
+  const [dailyMoves, setDailyMoves] = useState([]);
+  const [dailyMovesLoading, setDailyMovesLoading] = useState(false);
   const intervalRef = useRef(null);
   const chartsFetched = useRef(false);
   const briefGenerated = useRef(false);
@@ -192,6 +194,19 @@ export default function DashboardPage() {
     } catch {}
   }, [allSymbols.join(",")]);
 
+  // Immediately fetch index prices on mount (no waiting for portfolio/watchlist)
+  const indexFetched = useRef(false);
+  useEffect(() => {
+    if (indexFetched.current) return;
+    indexFetched.current = true;
+    (async () => {
+      try {
+        const r = await fetch(`/api/stocks/prices?symbols=SPY,QQQ,DIA`);
+        if (r.ok) { const d = await r.json(); setPrices((prev) => ({ ...prev, ...(d.prices || {}) })); setLastUpdate(new Date()); setLoading(false); }
+      } catch {}
+    })();
+  }, []);
+
   useEffect(() => { fetchPrices(); fetchNews(); }, [symbolsParam]);
   useEffect(() => {
     if (!isLive) { clearInterval(intervalRef.current); return; }
@@ -222,6 +237,29 @@ export default function DashboardPage() {
     briefGenerated.current = true;
     generateMorningBrief();
   }, [loading, portfolioHoldings, prices]);
+
+  // Fetch AI daily moves once portfolio + prices ready
+  const dailyMovesFetched = useRef(false);
+  useEffect(() => {
+    if (dailyMovesFetched.current || portfolioHoldings.length === 0 || Object.keys(prices).length === 0) return;
+    dailyMovesFetched.current = true;
+    (async () => {
+      setDailyMovesLoading(true);
+      try {
+        const holdings = portfolioHoldings.map((h) => ({
+          symbol: h.symbol, shares: h.shares, avg_cost: h.avg_cost,
+          ...prices[h.symbol],
+        }));
+        const r = await fetch("/api/ai/daily-moves", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ holdings }),
+        });
+        if (r.ok) { const d = await r.json(); setDailyMoves(d.moves || []); }
+      } catch {}
+      setDailyMovesLoading(false);
+    })();
+  }, [portfolioHoldings, prices]);
 
   // Fetch weekly suggestions + podcast
   useEffect(() => {
@@ -576,6 +614,37 @@ export default function DashboardPage() {
         })}
       </div>
 
+      {/* === AI DAILY MOVES === */}
+      {(dailyMovesLoading || dailyMoves.length > 0) && (
+        <div className="bg-card border border-border rounded-2xl px-4 py-3">
+          <div className="flex items-center gap-2 mb-2">
+            <h3 className="text-[10px] font-mono font-semibold text-muted-foreground">TODAY&apos;S MOVES</h3>
+            {dailyMovesLoading && <span className="animate-spin text-xs">⏳</span>}
+          </div>
+          {dailyMoves.length > 0 && (
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {dailyMoves.map((m, i) => {
+                const colors = {
+                  BUY: "bg-emerald-500/10 text-emerald-600 border-emerald-500/20",
+                  ADD: "bg-emerald-500/10 text-emerald-600 border-emerald-500/20",
+                  SELL: "bg-red-500/10 text-red-600 border-red-500/20",
+                  TRIM: "bg-amber-500/10 text-amber-600 border-amber-500/20",
+                  HOLD: "bg-blue-500/10 text-blue-600 border-blue-500/20",
+                };
+                const c = colors[m.action] || "bg-accent text-foreground border-border";
+                return (
+                  <div key={i} className={`flex items-center gap-2 px-3 py-2 rounded-xl border min-w-fit ${c}`}>
+                    <span className="text-[10px] font-mono font-bold">{m.action}</span>
+                    <span className="font-mono font-bold text-sm">{m.symbol}</span>
+                    <span className="text-[10px] text-muted-foreground max-w-[180px] truncate">{m.reason}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* === MAIN LAYOUT: Left (65%) + Right (35%) === */}
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
         {/* LEFT COLUMN */}
@@ -629,13 +698,24 @@ export default function DashboardPage() {
           {/* PORTFOLIO SCORE CARD */}
           {portfolioScore && (
             <div className="bg-card border border-border rounded-2xl p-4">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-[10px] font-mono font-semibold text-muted-foreground">PORTFOLIO HEALTH</h3>
-                <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded ${
-                  portfolioScore.returnPct >= 0 ? "bg-emerald-500/10 text-emerald-500" : "bg-red-500/10 text-red-500"
-                }`}>
-                  {portfolioScore.returnPct >= 0 ? "+" : ""}{portfolioScore.returnPct.toFixed(1)}% return
-                </span>
+              <div className="flex items-start justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-[10px] font-mono font-semibold text-muted-foreground">PORTFOLIO HEALTH</h3>
+                </div>
+                {/* Large portfolio value + return in upper right */}
+                <div className="text-right">
+                  <div className="font-mono font-bold text-2xl leading-tight">
+                    ${portfolioScore.totalValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                  </div>
+                  <div className={`font-mono font-bold text-lg leading-tight ${
+                    portfolioScore.returnPct >= 0 ? "text-emerald-500" : "text-red-500"
+                  }`}>
+                    {portfolioScore.returnPct >= 0 ? "+" : ""}{portfolioScore.returnPct.toFixed(2)}%
+                    <span className="text-xs ml-1">
+                      ({portfolioScore.returnPct >= 0 ? "+" : ""}${(portfolioScore.totalValue - portfolioScore.totalCost).toLocaleString(undefined, { maximumFractionDigits: 0 })})
+                    </span>
+                  </div>
+                </div>
               </div>
               <div className="flex items-center gap-4">
                 {/* Score circle */}
