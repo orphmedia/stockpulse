@@ -3,29 +3,7 @@ import { supabaseAdmin } from "@/lib/supabase";
 
 export const maxDuration = 60;
 
-// Fetch live quotes from Yahoo
-async function getYahooQuotes(symbols) {
-  try {
-    const res = await fetch(
-      `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${symbols.join(",")}&fields=regularMarketPrice,regularMarketChange,regularMarketChangePercent,shortName`,
-      { headers: { "User-Agent": "Mozilla/5.0" }, cache: "no-store" }
-    );
-    if (!res.ok) return {};
-    const data = await res.json();
-    const results = {};
-    for (const q of data.quoteResponse?.result || []) {
-      if (q.regularMarketPrice) {
-        results[q.symbol] = {
-          price: q.regularMarketPrice,
-          change: q.regularMarketChange || 0,
-          changePct: q.regularMarketChangePercent || 0,
-          name: q.shortName || q.symbol,
-        };
-      }
-    }
-    return results;
-  } catch { return {}; }
-}
+import { getYahooQuotes } from "@/lib/alpaca";
 
 export async function GET(request) {
   // Verify cron secret

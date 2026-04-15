@@ -292,7 +292,7 @@ export default function DashboardPage() {
         const p = prices[h.symbol];
         return sum + (p?.price || 0) * (h.shares || 0);
       }, 0);
-      const totalCost = portfolioHoldings.reduce((sum, h) => sum + (h.cost_basis || 0) * (h.shares || 0), 0);
+      const totalCost = portfolioHoldings.reduce((sum, h) => sum + (h.avg_cost || 0) * (h.shares || 0), 0);
       const dayChange = portfolioHoldings.reduce((sum, h) => {
         const p = prices[h.symbol];
         return sum + (p?.change || 0) * (h.shares || 0);
@@ -370,7 +370,7 @@ export default function DashboardPage() {
         body.holdings = portfolioHoldings.map((h) => ({
           symbol: h.symbol,
           shares: h.shares,
-          costBasis: h.cost_basis,
+          costBasis: h.avg_cost,
           ...prices[h.symbol],
         }));
       }
@@ -413,7 +413,7 @@ export default function DashboardPage() {
         case "symbol": vA = a.symbol; vB = b.symbol; return sortDir === "asc" ? vA.localeCompare(vB) : vB.localeCompare(vA);
         case "price": vA = pA.price || 0; vB = pB.price || 0; break;
         case "change": vA = pA.changePct || 0; vB = pB.changePct || 0; break;
-        case "pl": vA = ((pA.price || 0) - (a.cost_basis || 0)) * (a.shares || 0); vB = ((pB.price || 0) - (b.cost_basis || 0)) * (b.shares || 0); break;
+        case "pl": vA = ((pA.price || 0) - (a.avg_cost || 0)) * (a.shares || 0); vB = ((pB.price || 0) - (b.avg_cost || 0)) * (b.shares || 0); break;
         case "value": vA = (pA.price || 0) * (a.shares || 0); vB = (pB.price || 0) * (b.shares || 0); break;
         case "target": vA = pA.targetMean || 0; vB = pB.targetMean || 0; break;
         case "upside": {
@@ -774,8 +774,8 @@ export default function DashboardPage() {
                     {sortedPortfolio.map((h) => {
                       const p = prices[h.symbol] || {};
                       const value = (p.price || 0) * (h.shares || 0);
-                      const pl = ((p.price || 0) - (h.cost_basis || 0)) * (h.shares || 0);
-                      const plPct = h.cost_basis > 0 ? ((p.price || 0) - h.cost_basis) / h.cost_basis * 100 : 0;
+                      const pl = ((p.price || 0) - (h.avg_cost || 0)) * (h.shares || 0);
+                      const plPct = h.avg_cost > 0 ? ((p.price || 0) - h.avg_cost) / h.avg_cost * 100 : 0;
                       const upside = p.targetMean > 0 && p.price > 0 ? ((p.targetMean - p.price) / p.price * 100) : null;
                       return (
                         <tr key={h.symbol} className="border-b border-border/50 hover:bg-accent/30 cursor-pointer" onClick={() => window.location.href = `/stock/${h.symbol}`}>

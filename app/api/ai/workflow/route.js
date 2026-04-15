@@ -2,44 +2,13 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 
+import { getYahooQuotes } from "@/lib/alpaca";
+
 export const maxDuration = 60;
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 
-// Fetch live quotes from Yahoo
-async function getQuotes(symbols) {
-  try {
-    const res = await fetch(
-      `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${symbols.join(",")}&fields=regularMarketPrice,regularMarketChange,regularMarketChangePercent,shortName,regularMarketPreviousClose,regularMarketVolume,regularMarketDayHigh,regularMarketDayLow,trailingAnnualDividendRate,trailingAnnualDividendYield,epsTrailingTwelveMonths,trailingPE,marketCap,fiftyTwoWeekHigh,fiftyTwoWeekLow,averageAnalystRating,targetMeanPrice,numberOfAnalystOpinions`,
-      { headers: { "User-Agent": "Mozilla/5.0" }, cache: "no-store" }
-    );
-    if (!res.ok) return {};
-    const data = await res.json();
-    const r = {};
-    for (const q of data.quoteResponse?.result || []) {
-      if (q.regularMarketPrice) {
-        r[q.symbol] = {
-          price: q.regularMarketPrice,
-          change: q.regularMarketChange || 0,
-          changePct: q.regularMarketChangePercent || 0,
-          name: q.shortName || q.symbol,
-          volume: q.regularMarketVolume || 0,
-          pe: q.trailingPE || 0,
-          eps: q.epsTrailingTwelveMonths || 0,
-          marketCap: q.marketCap || 0,
-          week52High: q.fiftyTwoWeekHigh || 0,
-          week52Low: q.fiftyTwoWeekLow || 0,
-          analystRating: q.averageAnalystRating || null,
-          targetMean: q.targetMeanPrice || 0,
-          numAnalysts: q.numberOfAnalystOpinions || 0,
-          dividendRate: q.trailingAnnualDividendRate || 0,
-          dividendYield: q.trailingAnnualDividendYield ? (q.trailingAnnualDividendYield * 100) : 0,
-        };
-      }
-    }
-    return r;
-  } catch { return {}; }
-}
+const getQuotes = getYahooQuotes;
 
 const WORKFLOW_PROMPTS = {
   "earnings-prep": (symbol, data) => `You are a senior equity analyst preparing a pre-earnings briefing for ${symbol} (${data.name || symbol}).

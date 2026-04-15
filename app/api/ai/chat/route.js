@@ -4,13 +4,29 @@ export const runtime = "edge";
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 const MODEL = process.env.CHAT_MODEL || "claude-haiku-4-5-20251001";
 
-// Fetch real-time quotes from Yahoo Finance (server-side, no API key needed)
+// Yahoo Finance crumb auth (cached per edge instance)
+let _crumb = null, _cookie = null, _crumbExp = 0;
+async function getYahooCrumb() {
+  if (_crumb && _cookie && Date.now() < _crumbExp) return { crumb: _crumb, cookie: _cookie };
+  const cRes = await fetch("https://fc.yahoo.com", { headers: { "User-Agent": "Mozilla/5.0" }, redirect: "manual" });
+  const setCookies = cRes.headers.getSetCookie?.() || [];
+  const cookie = setCookies.map((c) => c.split(";")[0]).join("; ");
+  const crumbRes = await fetch("https://query2.finance.yahoo.com/v1/test/getcrumb", {
+    headers: { "User-Agent": "Mozilla/5.0", Cookie: cookie },
+  });
+  if (!crumbRes.ok) throw new Error("Crumb fetch failed");
+  const crumb = await crumbRes.text();
+  _crumb = crumb; _cookie = cookie; _crumbExp = Date.now() + 300000;
+  return { crumb, cookie };
+}
+
 async function fetchLiveQuotes(symbols) {
   if (!symbols || symbols.length === 0) return {};
   try {
+    const { crumb, cookie } = await getYahooCrumb();
     const res = await fetch(
-      `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${symbols.join(",")}&fields=regularMarketPrice,regularMarketChange,regularMarketChangePercent,shortName,regularMarketVolume,regularMarketDayHigh,regularMarketDayLow,regularMarketOpen,regularMarketPreviousClose`,
-      { headers: { "User-Agent": "Mozilla/5.0" }, cache: "no-store" }
+      `https://query2.finance.yahoo.com/v7/finance/quote?symbols=${symbols.join(",")}&crumb=${encodeURIComponent(crumb)}&fields=regularMarketPrice,regularMarketChange,regularMarketChangePercent,shortName,regularMarketVolume,regularMarketDayHigh,regularMarketDayLow,regularMarketOpen,regularMarketPreviousClose`,
+      { headers: { "User-Agent": "Mozilla/5.0", Cookie: cookie }, cache: "no-store" }
     );
     if (!res.ok) return {};
     const data = await res.json();

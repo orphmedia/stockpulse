@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
+import { getYahooQuotes } from "@/lib/alpaca";
 
 export const maxDuration = 60;
 
@@ -26,29 +27,6 @@ function getWeekOf(date) {
   const day = d.getDay();
   const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Monday of this week
   return new Date(d.setDate(diff)).toISOString().split("T")[0];
-}
-
-async function getYahooQuotes(symbols) {
-  try {
-    const res = await fetch(
-      `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${symbols.join(",")}&fields=regularMarketPrice,regularMarketChange,regularMarketChangePercent,shortName`,
-      { headers: { "User-Agent": "Mozilla/5.0" }, cache: "no-store" }
-    );
-    if (!res.ok) return {};
-    const data = await res.json();
-    const results = {};
-    for (const q of data.quoteResponse?.result || []) {
-      if (q.regularMarketPrice) {
-        results[q.symbol] = {
-          price: q.regularMarketPrice,
-          change: q.regularMarketChange || 0,
-          changePct: q.regularMarketChangePercent || 0,
-          name: q.shortName || q.symbol,
-        };
-      }
-    }
-    return results;
-  } catch { return {}; }
 }
 
 async function sendNotifications(summary, suggestionsCount) {
